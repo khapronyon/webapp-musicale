@@ -12,7 +12,6 @@ export default function NewsPage() {
           Le ultime notizie sui tuoi artisti preferiti
         </p>
 
-        {/* Lista News (placeholder) */}
         <div className="space-y-4">
           {[1, 2, 3].map((item) => (
             <div key={item} className="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-purple-500 transition-colors cursor-pointer">
@@ -23,7 +22,7 @@ export default function NewsPage() {
                 <div className="flex-1">
                   <h3 className="font-bold mb-2">Titolo Articolo Interessante</h3>
                   <p className="text-gray-400 text-sm mb-2">
-                    Breve descrizione dell'articolo che cattura l'attenzione del lettore...
+                    Breve descrizione articolo che cattura attenzione del lettore...
                   </p>
                   <p className="text-gray-500 text-xs">Fonte • 2 ore fa</p>
                 </div>
