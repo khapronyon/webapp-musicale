@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import UserMenu from './UserMenu';
 
 export default function Header() {
   const router = useRouter();
@@ -14,16 +15,14 @@ export default function Header() {
         >
           MusicHub
         </button>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
           <button className="hover:text-purple-400 relative transition-colors">
             🔔
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
               3
             </span>
           </button>
-          <button className="hover:text-purple-400 transition-colors">
-            👤
-          </button>
+          <UserMenu />
         </div>
       </div>
     </header>
