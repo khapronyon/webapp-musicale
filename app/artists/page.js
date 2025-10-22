@@ -184,7 +184,8 @@ export default function ArtistsPage() {
                 {searchResults.map((artist) => (
                   <div
                     key={artist.id}
-                    className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition"
+                    className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition cursor-pointer"
+                    onClick={() => router.push(`/artists/${artist.id}`)}
                   >
                     <div className="flex items-start gap-4">
                       {/* Artist Image */}
@@ -216,7 +217,10 @@ export default function ArtistsPage() {
 
                         {/* Follow Button */}
                         <button
-                          onClick={() => handleFollow(artist)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Previene navigazione al click
+                            handleFollow(artist);
+                          }}
                           disabled={isFollowing(artist.id)}
                           className={`mt-2 px-4 py-1 rounded-full text-sm font-medium transition ${
                             isFollowing(artist.id)
@@ -257,7 +261,8 @@ export default function ArtistsPage() {
               {followedArtists.map((artist) => (
                 <div
                   key={artist.id}
-                  className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition"
+                  className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition cursor-pointer"
+                  onClick={() => router.push(`/artists/${artist.artist_id}`)}
                 >
                   <div className="flex items-start gap-4">
                     {/* Artist Image */}
@@ -286,7 +291,10 @@ export default function ArtistsPage() {
 
                       {/* Unfollow Button */}
                       <button
-                        onClick={() => handleUnfollow(artist.artist_id)}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Previene navigazione al click
+                          handleUnfollow(artist.artist_id);
+                        }}
                         className="mt-2 px-4 py-1 rounded-full text-sm font-medium bg-red-100 text-red-600 hover:bg-red-200 transition"
                       >
                         Non seguire più
