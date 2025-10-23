@@ -35,13 +35,10 @@ export default function ReleasesPage() {
   async function loadReleases(user) {
     setLoading(true);
     try {
-      // 1. Ottieni artisti seguiti da Supabase
-      const { data: followedArtists, error: followError } = await supabase
+      const { data: followedArtists } = await supabase
         .from('followed_artists')
         .select('artist_id, artist_name, artist_image')
         .eq('user_id', user.id);
-
-      if (followError) throw followError;
 
       if (!followedArtists || followedArtists.length === 0) {
         setReleases([]);
@@ -49,19 +46,13 @@ export default function ReleasesPage() {
         return;
       }
 
-      console.log(`Trovati ${followedArtists.length} artisti seguiti`);
-
-      // 2. Per ogni artista, ottieni le sue release recenti
       const allReleases = [];
-
       for (const artist of followedArtists) {
         try {
-          // Chiamiamo un'API helper che ottiene solo le release di UN artista
           const response = await fetch(`/api/spotify/artist-releases?artist_id=${artist.artist_id}`);
           const data = await response.json();
 
           if (data.releases && data.releases.length > 0) {
-            // Aggiungi info artista a ogni release
             const releasesWithArtist = data.releases.map(release => ({
               ...release,
               artistName: artist.artist_name,
@@ -74,10 +65,7 @@ export default function ReleasesPage() {
         }
       }
 
-      // 3. Ordina per data (più recenti prima)
       allReleases.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-
-      console.log(`Totale release trovate: ${allReleases.length}`);
       setReleases(allReleases);
     } catch (error) {
       console.error('Errore caricamento release:', error);
@@ -129,11 +117,11 @@ export default function ReleasesPage() {
 
   function getTypeColor(type) {
     const colors = {
-      'album': 'bg-purple-100 text-purple-700',
-      'single': 'bg-blue-100 text-blue-700',
-      'compilation': 'bg-green-100 text-green-700'
+      'album': 'bg-primary text-white border-2 border-primary-dark',
+      'single': 'bg-secondary text-white border-2 border-secondary',
+      'compilation': 'bg-primary-dark text-white border-2 border-primary'
     };
-    return colors[type] || 'bg-gray-100 text-gray-700';
+    return colors[type] || 'bg-gray-500 text-white border-2 border-gray-700';
   }
 
   const stats = {
@@ -143,42 +131,40 @@ export default function ReleasesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-neutral-light">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 py-8 pb-24">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Nuove Release</h1>
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-neutral-dark mb-2">Nuove Release</h1>
         <p className="text-gray-600 mb-8">
           Le ultime uscite degli artisti che segui
         </p>
 
-        {/* Stats */}
         {!loading && releases.length > 0 && (
           <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="bg-white rounded-lg shadow-md p-4 border-2 border-primary-light">
               <p className="text-gray-500 text-sm">Totale</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+              <p className="text-2xl font-bold text-primary">{stats.total}</p>
             </div>
-            <div className="bg-purple-50 rounded-lg shadow-md p-4">
-              <p className="text-purple-600 text-sm">Album</p>
-              <p className="text-2xl font-bold text-purple-700">{stats.albums}</p>
+            <div className="bg-primary rounded-lg shadow-md p-4 border-2 border-primary-dark">
+              <p className="text-white text-sm font-medium">Album</p>
+              <p className="text-3xl font-bold text-white">{stats.albums}</p>
             </div>
-            <div className="bg-blue-50 rounded-lg shadow-md p-4">
-              <p className="text-blue-600 text-sm">Singoli</p>
-              <p className="text-2xl font-bold text-blue-700">{stats.singles}</p>
+            <div className="bg-secondary rounded-lg shadow-md p-4 border-2 border-secondary">
+              <p className="text-white text-sm font-medium">Singoli</p>
+              <p className="text-3xl font-bold text-white">{stats.singles}</p>
             </div>
           </div>
         )}
 
-        {/* Filters */}
         {!loading && releases.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-8">
             <button
               onClick={() => setFilterType('all')}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 filterType === 'all'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
               }`}
             >
               Tutti ({stats.total})
@@ -187,8 +173,8 @@ export default function ReleasesPage() {
               onClick={() => setFilterType('album')}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 filterType === 'album'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
               }`}
             >
               Album ({stats.albums})
@@ -197,8 +183,8 @@ export default function ReleasesPage() {
               onClick={() => setFilterType('single')}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 filterType === 'single'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-secondary text-white'
+                  : 'bg-white text-neutral-dark hover:bg-secondary hover:bg-opacity-20 border-2 border-secondary'
               }`}
             >
               Singoli ({stats.singles})
@@ -206,7 +192,6 @@ export default function ReleasesPage() {
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div className="text-center py-12">
             <div className="text-6xl mb-4 animate-bounce">🎵</div>
@@ -214,11 +199,10 @@ export default function ReleasesPage() {
           </div>
         )}
 
-        {/* Empty State */}
         {!loading && releases.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-lg shadow-md">
+          <div className="text-center py-12 bg-white rounded-lg shadow-md border-2 border-primary-light">
             <p className="text-6xl mb-4">📀</p>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">
+            <h2 className="text-xl font-bold text-neutral-dark mb-2">
               Nessuna release trovata
             </h2>
             <p className="text-gray-600 mb-6">
@@ -226,14 +210,13 @@ export default function ReleasesPage() {
             </p>
             <button
               onClick={() => router.push('/artists')}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+              className="px-6 py-3 bg-primary hover:bg-primary-light text-white rounded-lg transition font-medium"
             >
               Cerca Artisti
             </button>
           </div>
         )}
 
-        {/* No results after filter */}
         {!loading && releases.length > 0 && filteredReleases.length === 0 && (
           <div className="text-center py-12">
             <p className="text-6xl mb-4">🔍</p>
@@ -243,7 +226,6 @@ export default function ReleasesPage() {
           </div>
         )}
 
-        {/* Releases Grid */}
         {!loading && filteredReleases.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filteredReleases.map((release) => (
@@ -252,9 +234,8 @@ export default function ReleasesPage() {
                 href={release.spotifyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group"
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group border-2 border-transparent hover:border-primary"
               >
-                {/* Cover Image */}
                 <div className="aspect-square overflow-hidden bg-gray-200 relative">
                   {release.image ? (
                     <img
@@ -267,26 +248,24 @@ export default function ReleasesPage() {
                       💿
                     </div>
                   )}
-                  {/* NEW badge */}
                   {(() => {
                     const releaseDate = new Date(release.releaseDate);
                     const now = new Date();
                     const diffDays = Math.ceil((now - releaseDate) / (1000 * 60 * 60 * 24));
                     return diffDays <= 30 && (
-                      <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      <div className="absolute top-2 right-2 bg-secondary text-white text-xs font-bold px-2 py-1 rounded-full">
                         NEW
                       </div>
                     );
                   })()}
                 </div>
 
-                {/* Info */}
                 <div className="p-3">
                   <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-2 ${getTypeColor(release.type)}`}>
                     {getTypeLabel(release.type)}
                   </span>
 
-                  <h3 className="font-bold text-gray-800 text-sm mb-1 line-clamp-2">
+                  <h3 className="font-bold text-neutral-dark text-sm mb-1 line-clamp-2">
                     {release.name}
                   </h3>
 

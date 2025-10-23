@@ -1,26 +1,92 @@
 @import "tailwindcss";
 
+@theme {
+  /* Primari - Verdeacqua */
+  --color-primary: #009E9D;
+  --color-primary-light: #33C2BE;
+  --color-primary-dark: #007C7B;
+  
+  /* Secondari - Viola neon */
+  --color-secondary: #C63DF7;
+  --color-secondary-light: #D873FA;
+  
+  /* Neutri */
+  --color-neutral-light: #F8F9FA;
+  --color-neutral-dark: #222222;
+  
+  /* Alias comuni */
+  --color-teal-500: #009E9D;
+  --color-teal-400: #33C2BE;
+  --color-teal-600: #007C7B;
+  
+  --color-purple-500: #C63DF7;
+  --color-purple-400: #D873FA;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #F8F9FA;
+  --foreground: #222222;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Scrollbar personalizzata */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-neutral-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-light);
+}
+
+/* Animazioni */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s infinite;
+  background: linear-gradient(to right, #f0f0f0 8%, #e0e0e0 18%, #f0f0f0 33%);
+  background-size: 1000px 100%;
+}
+
+/* Glow effects */
+.glow-primary {
+  box-shadow: 0 0 20px rgba(0, 158, 157, 0.3);
+}
+
+.glow-secondary {
+  box-shadow: 0 0 20px rgba(198, 61, 247, 0.3);
 }

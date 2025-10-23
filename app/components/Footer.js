@@ -1,47 +1,38 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { Mic2, Disc3, Newspaper, Guitar, ShoppingBag } from 'lucide-react';
 
 export default function Footer() {
-  const pathname = usePathname();
   const router = useRouter();
 
-  const sections = [
-    { icon: "🛍️", label: "Merch", path: "/merch" },
-    { icon: "🎤", label: "Concerti", path: "/concerts" },
-    { icon: "⭐", label: "Artisti", path: "/artists", featured: true },
-    { icon: "🎵", label: "Release", path: "/releases" },
-    { icon: "📰", label: "News", path: "/news" },
+  const mainLinks = [
+    { icon: ShoppingBag, label: 'Merch', path: '/merch' },
+    { icon: Guitar, label: 'Concerts', path: '/concerts' },
+    { icon: Mic2, label: 'Artists', path: '/artists' },
+    { icon: Disc3, label: 'Release', path: '/releases' },
+    { icon: Newspaper, label: 'News', path: '/news' },
   ];
 
-  const handleNavigation = (path) => {
-    router.push(path);
-  };
-
   return (
-    <footer className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 py-3">
-        <div className="flex justify-around items-center">
-          {sections.map((section) => {
-            const isActive = pathname === section.path;
-            
+    <footer className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-primary-dark to-primary shadow-2xl border-t-4 border-secondary z-50">
+      <div className="max-w-7xl mx-auto px-2">
+        {/* Mobile Navigation Bar */}
+        <div className="flex items-center justify-around py-3">
+          {mainLinks.map((link) => {
+            const IconComponent = link.icon;
             return (
               <button
-                key={section.label}
-                onClick={() => handleNavigation(section.path)}
-                className={`flex flex-col items-center gap-1 transition-all ${
-                  section.featured ? "scale-125" : ""
-                } ${
-                  isActive ? "text-purple-400" : "text-gray-400 hover:text-purple-400"
-                }`}
+                key={link.path}
+                onClick={() => router.push(link.path)}
+                className="flex flex-col items-center text-white hover:text-secondary-light transition group"
               >
-                <span className="text-2xl">{section.icon}</span>
-                <span className={`text-xs ${section.featured ? "font-bold" : ""}`}>
-                  {section.label}
-                </span>
-                {isActive && (
-                  <span className="w-1 h-1 bg-purple-400 rounded-full"></span>
-                )}
+                <IconComponent 
+                  size={32} 
+                  strokeWidth={2}
+                  className="group-hover:scale-110 transition-transform"
+                />
+                <span className="text-xs font-medium mt-1">{link.label}</span>
               </button>
             );
           })}

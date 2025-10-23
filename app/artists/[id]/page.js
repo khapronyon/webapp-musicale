@@ -1,107 +1,110 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
+import { ExternalLink, Play } from 'lucide-react';
 
 export default function ArtistDetailPage({ params }) {
   const router = useRouter();
-  const [artist, setArtist] = useState(null);
-  const [topTracks, setTopTracks] = useState([]);
-  const [albums, setAlbums] = useState([]);
-  const [relatedArtists, setRelatedArtists] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const unwrappedParams = use(params);
+  const artistId = unwrappedParams.id;
+  
   const [user, setUser] = useState(null);
+  const [artist, setArtist] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isFollowed, setIsFollowed] = useState(false);
 
   useEffect(() => {
-    loadArtistData();
     checkUser();
-  }, [params.id]);
+  }, []);
 
   async function checkUser() {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
     setUser(user);
-    if (user) {
-      checkIfFollowing(user.id);
-    }
+    loadArtistData(user, artistId);
   }
 
-  async function checkIfFollowing(userId) {
-    try {
-      const { data } = await supabase
-        .from('followed_artists')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('artist_id', params.id)
-        .single();
-      
-      setIsFollowing(!!data);
-    } catch (error) {
-      setIsFollowing(false);
-    }
-  }
-
-  async function loadArtistData() {
+  async function loadArtistData(user, artistId) {
     setLoading(true);
     try {
-      const response = await fetch(`/api/spotify/artist/${params.id}`);
+      const response = await fetch(`/api/spotify/artist/${artistId}`);
       const data = await response.json();
 
       if (data.error) {
         throw new Error(data.error);
       }
 
-      setArtist(data.artist);
-      setTopTracks(data.topTracks);
-      setAlbums(data.albums);
-      setRelatedArtists(data.relatedArtists);
+      // L'API ritorna { artist, topTracks, albums, relatedArtists }
+      // data.artist ha già i dati formattati dalla nostra API
+      const artistData = {
+        id: artistId,
+        name: data.artist?.name,
+        image: data.artist?.image, // ← Direttamente da artist.image
+        followers: data.artist?.followers || 0,
+        genres: data.artist?.genres || [],
+        spotifyUrl: data.artist?.spotifyUrl,
+        topTracks: data.topTracks || [],
+        albums: data.albums || [],
+        relatedArtists: data.relatedArtists || [],
+      };
+
+      console.log('✅ Dati artista caricati:', artistData.name);
+      console.log('✅ URL immagine:', artistData.image);
+
+      setArtist(artistData);
+
+      const { data: followData } = await supabase
+        .from('followed_artists')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('artist_id', artistId)
+        .single();
+
+      setIsFollowed(!!followData);
     } catch (error) {
-      console.error('Errore caricamento artista:', error);
+      console.error('❌ Errore caricamento artista:', error);
       alert('Errore durante il caricamento. Riprova.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleFollow() {
-    if (!user) {
-      router.push('/auth/login');
-      return;
-    }
+  async function toggleFollow() {
+    if (!user || !artist) return;
 
     try {
-      if (isFollowing) {
-        // Unfollow
+      if (isFollowed) {
         const { error } = await supabase
           .from('followed_artists')
           .delete()
           .eq('user_id', user.id)
-          .eq('artist_id', params.id);
+          .eq('artist_id', artist.id);
 
         if (error) throw error;
-        setIsFollowing(false);
+
+        setIsFollowed(false);
+        alert(`Non segui più ${artist.name}`);
       } else {
-        // Follow
         const { error } = await supabase
           .from('followed_artists')
           .insert({
             user_id: user.id,
             artist_id: artist.id,
             artist_name: artist.name,
-            artist_image: artist.image,
+            artist_image: artist.image || null,
           });
 
-        if (error) {
-          if (error.code === '23505') {
-            setIsFollowing(true);
-            return;
-          }
-          throw error;
-        }
-        setIsFollowing(true);
+        if (error) throw error;
+
+        setIsFollowed(true);
+        alert(`Ora segui ${artist.name}! 🎵`);
       }
     } catch (error) {
       console.error('Errore follow/unfollow:', error);
@@ -109,31 +112,41 @@ export default function ArtistDetailPage({ params }) {
     }
   }
 
-  function formatDuration(ms) {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = ((ms % 60000) / 1000).toFixed(0);
-    return `${minutes}:${seconds.padStart(2, '0')}`;
-  }
-
-  function formatFollowers(num) {
+  function formatNumber(num) {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
     }
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + 'K';
     }
-    return num.toString();
+    return num;
+  }
+
+  function getTypeColor(type) {
+    const colors = {
+      'album': 'bg-primary text-white border-2 border-primary-dark',
+      'single': 'bg-secondary text-white border-2 border-secondary',
+      'compilation': 'bg-primary-dark text-white border-2 border-primary'
+    };
+    return colors[type] || 'bg-gray-500 text-white border-2 border-gray-700';
+  }
+
+  function getTypeLabel(type) {
+    const labels = {
+      'album': 'Album',
+      'single': 'Singolo',
+      'compilation': 'Compilation'
+    };
+    return labels[type] || type;
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-neutral-light">
         <Header />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="text-6xl mb-4">🎵</div>
-            <p className="text-gray-600">Caricamento...</p>
-          </div>
+        <div className="text-center py-20">
+          <div className="text-6xl mb-4 animate-bounce">🎵</div>
+          <p className="text-gray-600">Caricamento...</p>
         </div>
         <Footer />
       </div>
@@ -142,19 +155,11 @@ export default function ArtistDetailPage({ params }) {
 
   if (!artist) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-neutral-light">
         <Header />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="text-6xl mb-4">❌</div>
-            <p className="text-gray-600">Artista non trovato</p>
-            <button
-              onClick={() => router.push('/artists')}
-              className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-            >
-              Torna agli artisti
-            </button>
-          </div>
+        <div className="text-center py-20">
+          <p className="text-6xl mb-4">❌</p>
+          <p className="text-gray-600">Artista non trovato</p>
         </div>
         <Footer />
       </div>
@@ -162,182 +167,178 @@ export default function ArtistDetailPage({ params }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-neutral-light">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 py-8 pb-24">
-        {/* Artist Header */}
-        <div className="bg-gradient-to-br from-purple-600 to-blue-500 rounded-2xl p-8 text-white mb-8">
-          <button
-            onClick={() => router.back()}
-            className="mb-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition"
-          >
-            ← Indietro
-          </button>
+      {/* Artist Header */}
+      <div 
+        className="relative h-80 bg-gradient-to-b from-primary via-primary-light to-transparent"
+      >
+        {/* Background Image con Overlay */}
+        {artist.image && (
+          <div 
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage: `url(${artist.image})`,
+              filter: 'brightness(0.4)',
+            }}
+          />
+        )}
+        
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/70 via-primary-light/70 to-transparent" />
 
-          <div className="flex flex-col md:flex-row gap-6 items-start">
-            {/* Artist Image */}
-            <div className="w-48 h-48 flex-shrink-0">
-              {artist.image ? (
-                <img
-                  src={artist.image}
-                  alt={artist.name}
-                  className="w-full h-full object-cover rounded-xl shadow-2xl"
-                />
-              ) : (
-                <div className="w-full h-full bg-white/20 rounded-xl flex items-center justify-center text-7xl">
-                  🎤
-                </div>
-              )}
-            </div>
-
-            {/* Artist Info */}
-            <div className="flex-1">
-              <h1 className="text-4xl md:text-5xl font-bold mb-2">{artist.name}</h1>
-              <p className="text-xl mb-4 opacity-90">
-                {formatFollowers(artist.followers)} follower su Spotify
-              </p>
-
-              {/* Genres */}
-              {artist.genres && artist.genres.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {artist.genres.slice(0, 5).map((genre) => (
-                    <span
-                      key={genre}
-                      className="px-3 py-1 bg-white/20 rounded-full text-sm"
-                    >
-                      {genre}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleFollow}
-                  className={`px-6 py-3 rounded-lg font-medium transition ${
-                    isFollowing
-                      ? 'bg-white/20 hover:bg-white/30'
-                      : 'bg-white text-purple-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {isFollowing ? '✓ Seguito' : '+ Segui'}
-                </button>
-                <a
-                  href={artist.spotifyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-6 py-3 bg-green-500 hover:bg-green-600 rounded-lg font-medium transition"
-                >
-                  Apri su Spotify
-                </a>
+        {/* Content */}
+        <div className="absolute bottom-0 left-0 right-0 p-8">
+          <div className="max-w-7xl mx-auto flex items-end gap-6">
+            {artist.image && (
+              <img
+                src={artist.image}
+                alt={artist.name}
+                className="w-48 h-48 rounded-lg shadow-2xl border-4 border-white object-cover relative z-10"
+              />
+            )}
+            <div className="flex-1 pb-4 relative z-10">
+              <h1 className="text-5xl font-bold text-white mb-2 drop-shadow-lg">{artist.name}</h1>
+              <div className="flex items-center gap-4 text-white drop-shadow-lg">
+                <span className="text-lg font-medium">{formatNumber(artist.followers)} follower</span>
+                {artist.genres && artist.genres.length > 0 && (
+                  <span className="text-lg">• {artist.genres.slice(0, 3).join(', ')}</span>
+                )}
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Action Buttons */}
+        <div className="flex gap-4 mb-8">
+          <button
+            onClick={toggleFollow}
+            className={`px-6 py-3 rounded-lg font-bold transition ${
+              isFollowed
+                ? 'bg-primary-dark text-white hover:bg-primary'
+                : 'bg-secondary text-white hover:bg-secondary-light'
+            }`}
+          >
+            {isFollowed ? 'Seguito ✓' : 'Segui'}
+          </button>
+          <a
+            href={artist.spotifyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-6 py-3 bg-white border-2 border-primary text-primary rounded-lg font-bold hover:bg-primary hover:text-white transition flex items-center gap-2"
+          >
+            Apri su Spotify <ExternalLink size={20} />
+          </a>
+        </div>
 
         {/* Top Tracks */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">Brani Popolari</h2>
-          <div className="bg-white rounded-xl shadow-md overflow-hidden">
-            {topTracks.map((track, index) => (
-              <div
-                key={track.id}
-                className="flex items-center gap-4 p-4 hover:bg-gray-50 transition border-b last:border-b-0"
-              >
-                <span className="text-gray-400 font-medium w-6">{index + 1}</span>
-                <img
-                  src={track.albumImage || '/placeholder.png'}
-                  alt={track.album}
-                  className="w-12 h-12 rounded object-cover"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800 truncate">{track.name}</p>
-                  <p className="text-sm text-gray-500 truncate">{track.album}</p>
-                </div>
-                <span className="text-gray-400 text-sm">{formatDuration(track.durationMs)}</span>
-                {track.previewUrl && (
-                  <a
-                    href={track.previewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1 bg-purple-100 text-purple-600 rounded-lg text-sm hover:bg-purple-200 transition"
-                  >
-                    ▶ Preview
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Albums */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">
-            Discografia ({albums.length})
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {albums.map((album) => (
-              <a
-                key={album.id}
-                href={album.spotifyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-white rounded-lg shadow-md p-3 hover:shadow-lg transition group"
-              >
-                <div className="aspect-square mb-3 overflow-hidden rounded-lg">
-                  {album.image ? (
-                    <img
-                      src={album.image}
-                      alt={album.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-200 flex items-center justify-center text-4xl">
-                      💿
-                    </div>
-                  )}
-                </div>
-                <h3 className="font-medium text-gray-800 text-sm truncate mb-1">
-                  {album.name}
-                </h3>
-                <p className="text-xs text-gray-500">
-                  {new Date(album.releaseDate).getFullYear()} • {album.totalTracks} brani
-                </p>
-              </a>
-            ))}
-          </div>
-        </section>
-
-        {/* Related Artists */}
-        {relatedArtists.length > 0 && (
-          <section>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Artisti Correlati</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {relatedArtists.map((relatedArtist) => (
-                <div
-                  key={relatedArtist.id}
-                  onClick={() => router.push(`/artists/${relatedArtist.id}`)}
-                  className="bg-white rounded-lg shadow-md p-3 hover:shadow-lg transition cursor-pointer group text-center"
+        {artist.topTracks && artist.topTracks.length > 0 && (
+          <section className="mb-12">
+            <h2 className="text-2xl font-bold text-neutral-dark mb-4">Brani Popolari</h2>
+            <div className="bg-white rounded-lg shadow-md border-2 border-primary-light overflow-hidden">
+              {artist.topTracks.map((track, index) => (
+                <a
+                  key={track.id}
+                  href={track.spotifyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-4 p-4 hover:bg-neutral-light transition border-b last:border-b-0 group"
                 >
-                  <div className="aspect-square mb-2 overflow-hidden rounded-lg">
-                    {relatedArtist.image ? (
+                  <span className="text-gray-400 font-bold w-6">{index + 1}</span>
+                  {track.image && (
+                    <img
+                      src={track.image}
+                      alt={track.name}
+                      className="w-14 h-14 rounded shadow-md"
+                    />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-bold text-neutral-dark group-hover:text-primary transition">{track.name}</p>
+                    <p className="text-sm text-gray-500">{track.album}</p>
+                  </div>
+                  <Play className="text-secondary opacity-0 group-hover:opacity-100 transition" size={24} />
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Discography */}
+        {artist.albums && artist.albums.length > 0 && (
+          <section className="mb-12">
+            <h2 className="text-2xl font-bold text-neutral-dark mb-4">Discografia</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {artist.albums.map((album) => (
+                <a
+                  key={album.id}
+                  href={album.spotifyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group border-2 border-transparent hover:border-primary"
+                >
+                  <div className="aspect-square overflow-hidden bg-gray-200">
+                    {album.image ? (
                       <img
-                        src={relatedArtist.image}
-                        alt={relatedArtist.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                        src={album.image}
+                        alt={album.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gray-200 flex items-center justify-center text-3xl">
+                      <div className="w-full h-full flex items-center justify-center text-4xl">
+                        💿
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-2 ${getTypeColor(album.type)}`}>
+                      {getTypeLabel(album.type)}
+                    </span>
+                    <h3 className="font-bold text-neutral-dark text-sm mb-1 line-clamp-2">
+                      {album.name}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {new Date(album.releaseDate).getFullYear()}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Related Artists */}
+        {artist.relatedArtists && artist.relatedArtists.length > 0 && (
+          <section>
+            <h2 className="text-2xl font-bold text-neutral-dark mb-4">Artisti Simili</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {artist.relatedArtists.map((relArtist) => (
+                <button
+                  key={relArtist.id}
+                  onClick={() => router.push(`/artists/${relArtist.id}`)}
+                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group border-2 border-transparent hover:border-secondary"
+                >
+                  <div className="aspect-square overflow-hidden bg-gray-200">
+                    {relArtist.image ? (
+                      <img
+                        src={relArtist.image}
+                        alt={relArtist.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl">
                         🎤
                       </div>
                     )}
                   </div>
-                  <h3 className="font-medium text-gray-800 text-sm truncate">
-                    {relatedArtist.name}
-                  </h3>
-                </div>
+                  <div className="p-3">
+                    <h3 className="font-bold text-neutral-dark text-sm text-center line-clamp-2">
+                      {relArtist.name}
+                    </h3>
+                  </div>
+                </button>
               ))}
             </div>
           </section>

@@ -1,28 +1,109 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import UserMenu from './UserMenu';
+import { supabase } from '@/lib/supabase';
+import { Bell, User } from 'lucide-react';
 
 export default function Header() {
   const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  useEffect(() => {
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function checkUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setShowUserMenu(false);
+    router.push('/');
+  }
 
   return (
-    <header className="bg-gray-800 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-        <button 
-          onClick={() => router.push('/')}
-          className="text-2xl font-bold text-purple-500 hover:text-purple-400 transition-colors"
-        >
-          MusicHub
-        </button>
-        <div className="flex gap-4 items-center">
-          <button className="hover:text-purple-400 relative transition-colors">
-            🔔
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              3
-            </span>
+    <header className="bg-gradient-to-r from-primary to-primary-light shadow-lg sticky top-0 z-40">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <button
+            onClick={() => router.push('/')}
+            className="text-white hover:scale-110 transition-transform"
+          >
+            <span className="text-4xl">🎵</span>
           </button>
-          <UserMenu />
+
+          {/* Right Side: Notifications + User */}
+          <div className="flex items-center gap-4">
+            {/* Notifications */}
+            {user && (
+              <button className="relative text-white hover:scale-110 transition-transform">
+                <Bell size={28} strokeWidth={2} />
+                <span className="absolute -top-1 -right-1 bg-secondary text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                  3
+                </span>
+              </button>
+            )}
+
+            {/* User Menu */}
+            {user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="text-white hover:scale-110 transition-transform"
+                >
+                  <User size={28} strokeWidth={2} />
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 border-2 border-primary-light">
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        router.push('/artists');
+                      }}
+                      className="w-full text-left px-4 py-2 text-neutral-dark hover:bg-primary-light hover:bg-opacity-10 transition"
+                    >
+                      I Miei Artisti
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        router.push('/releases');
+                      }}
+                      className="w-full text-left px-4 py-2 text-neutral-dark hover:bg-primary-light hover:bg-opacity-10 transition"
+                    >
+                      Le Mie Release
+                    </button>
+                    <hr className="my-2 border-gray-200" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 transition font-medium"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => router.push('/auth/login')}
+                className="bg-secondary hover:bg-secondary-light text-white font-bold px-6 py-2 rounded-full transition hover:scale-105 shadow-lg"
+              >
+                Accedi
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </header>
