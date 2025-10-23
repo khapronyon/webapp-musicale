@@ -440,7 +440,7 @@ export default function ArtistDetailPage({ params }) {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex flex-col items-center gap-1 px-2 py-3 font-medium transition ${
                     activeTab === tab.id
-                      ? 'text-primary border-b-4 border-primary bg-primary bg-opacity-5'
+                      ? 'text-white bg-primary border-b-4 border-primary-dark'
                       : 'text-gray-600 hover:text-primary hover:bg-primary-light hover:bg-opacity-10'
                   }`}
                 >
@@ -449,7 +449,7 @@ export default function ArtistDetailPage({ params }) {
                   {tab.count > 0 && (
                     <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
                       activeTab === tab.id
-                        ? 'bg-primary text-white'
+                        ? 'bg-white text-primary'
                         : 'bg-gray-200 text-gray-600'
                     }`}>
                       {tab.count}
