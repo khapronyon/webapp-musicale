@@ -89,4 +89,20 @@ body {
 
 .glow-secondary {
   box-shadow: 0 0 20px rgba(198, 61, 247, 0.3);
+/* Animazioni per modal e transizioni */
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
 }
