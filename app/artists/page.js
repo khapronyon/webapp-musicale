@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import UnfollowModal from '../components/UnfollowModal';
-import { Search, ArrowUpDown, Filter } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 export default function ArtistsPage() {
   const router = useRouter();
@@ -271,7 +271,7 @@ export default function ArtistsPage() {
         <p className="text-gray-600 mb-8">Cerca e segui i tuoi artisti preferiti</p>
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="mb-8">
+        <form onSubmit={handleSearch} className="mb-6">
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -288,71 +288,52 @@ export default function ArtistsPage() {
               disabled={loading}
               className="px-6 py-3 bg-primary hover:bg-primary-light text-white rounded-lg font-medium transition disabled:opacity-50"
             >
-              {loading ? 'Ricerca...' : 'Cerca'}
+              {loading ? '...' : 'Cerca'}
             </button>
           </div>
         </form>
 
-        {/* Toggle View */}
-        <div className="flex gap-2 mb-6">
+        {/* Toggle View - SOLO SEGUITI */}
+        {!showFollowed && searchResults.length > 0 && (
           <button
             onClick={() => setShowFollowed(true)}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
-              showFollowed
-                ? 'bg-primary text-white'
-                : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
-            }`}
+            className="mb-4 text-primary hover:text-primary-dark font-medium transition flex items-center gap-2"
           >
-            Seguiti ({followedArtists.length})
-            {artistsWithNotifications.size > 0 && (
-              <span className="ml-2 bg-secondary text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {artistsWithNotifications.size}
-              </span>
-            )}
+            ← Torna ai seguiti
           </button>
-          <button
-            onClick={() => setShowFollowed(false)}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
-              !showFollowed
-                ? 'bg-secondary text-white'
-                : 'bg-white text-neutral-dark hover:bg-secondary hover:bg-opacity-20 border-2 border-secondary'
-            }`}
-          >
-            Risultati Ricerca ({searchResults.length})
-          </button>
-        </div>
+        )}
 
-        {/* Filtri e Ordinamento */}
+        {/* Filtri e Ordinamento - UNA RIGA COMPATTA */}
         {showFollowed && followedArtists.length > 0 && (
-          <div className="flex flex-wrap gap-3 mb-6 pb-4 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <ArrowUpDown size={18} className="text-gray-500" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white"
-              >
-                <option value="name">Ordina: A-Z</option>
-                <option value="date">Ordina: Seguiti di recente</option>
-                <option value="updates">Ordina: Con novità</option>
-              </select>
-            </div>
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white text-sm whitespace-nowrap flex-shrink-0"
+            >
+              <option value="name">A-Z</option>
+              <option value="date">Recenti</option>
+              <option value="updates">Novità</option>
+            </select>
 
-            <div className="flex items-center gap-2">
-              <Filter size={18} className="text-gray-500" />
-              <select
-                value={filterBy}
-                onChange={(e) => setFilterBy(e.target.value)}
-                className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white"
-              >
-                <option value="all">Mostra: Tutti</option>
-                <option value="with-updates">Mostra: Solo con novità</option>
-              </select>
-            </div>
+            <select
+              value={filterBy}
+              onChange={(e) => setFilterBy(e.target.value)}
+              className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white text-sm whitespace-nowrap flex-shrink-0"
+            >
+              <option value="all">Tutti</option>
+              <option value="with-updates">Solo novità</option>
+            </select>
+
+            {artistsWithNotifications.size > 0 && (
+              <div className="px-3 py-2 bg-secondary text-white rounded-lg text-sm font-medium whitespace-nowrap flex-shrink-0">
+                {artistsWithNotifications.size} {artistsWithNotifications.size === 1 ? 'novità' : 'novità'}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Followed Artists */}
+        {/* Followed Artists - GRID COMPATTO MOBILE */}
         {showFollowed && (
           <div>
             {followedArtists.length === 0 ? (
@@ -376,7 +357,7 @@ export default function ArtistsPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
                 {displayedArtists.map((artist) => (
                   <div
                     key={artist.artist_id}
@@ -384,8 +365,8 @@ export default function ArtistsPage() {
                   >
                     {/* Badge Novità */}
                     {hasUpdates(artist.artist_id) && (
-                      <div className="absolute top-2 right-2 bg-secondary text-white text-xs font-bold px-2 py-1 rounded-full z-10 animate-pulse">
-                        ! Novità
+                      <div className="absolute top-1 right-1 bg-secondary text-white text-xs font-bold px-1.5 py-0.5 rounded-full z-10 animate-pulse">
+                        !
                       </div>
                     )}
 
@@ -401,22 +382,22 @@ export default function ArtistsPage() {
                             className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-6xl">
+                          <div className="w-full h-full flex items-center justify-center text-4xl">
                             🎤
                           </div>
                         )}
                       </div>
-                      <div className="p-4">
-                        <h3 className="font-bold text-neutral-dark text-center line-clamp-2">
+                      <div className="p-2">
+                        <h3 className="font-bold text-neutral-dark text-xs text-center line-clamp-2 min-h-[32px]">
                           {artist.artist_name}
                         </h3>
                       </div>
                     </button>
 
-                    <div className="px-4 pb-4">
+                    <div className="px-2 pb-2">
                       <button
                         onClick={() => initiateUnfollow(artist)}
-                        className="w-full py-2 bg-primary-dark text-white rounded-lg font-medium hover:bg-red-500 transition"
+                        className="w-full py-1.5 bg-primary-dark text-white rounded text-xs font-medium hover:bg-red-500 transition"
                       >
                         Seguito ✓
                       </button>
@@ -428,7 +409,7 @@ export default function ArtistsPage() {
           </div>
         )}
 
-        {/* Search Results */}
+        {/* Search Results - GRID COMPATTO MOBILE */}
         {!showFollowed && (
           <div>
             {loading && (
@@ -441,12 +422,12 @@ export default function ArtistsPage() {
             {!loading && searchResults.length === 0 && searchQuery && (
               <div className="text-center py-12">
                 <p className="text-6xl mb-4">🔍</p>
-                <p className="text-gray-500">Nessun risultato trovato per &ldquo;{searchQuery}&rdquo;</p>
+                <p className="text-gray-500">Nessun risultato per &ldquo;{searchQuery}&rdquo;</p>
               </div>
             )}
 
             {!loading && searchResults.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
                 {searchResults.map((artist) => (
                   <div
                     key={artist.id}
@@ -464,29 +445,24 @@ export default function ArtistsPage() {
                             className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-6xl">
+                          <div className="w-full h-full flex items-center justify-center text-4xl">
                             🎤
                           </div>
                         )}
                         {isFollowed(artist.id) && (
-                          <div className="absolute top-2 right-2 bg-primary text-white text-xs font-bold px-2 py-1 rounded-full">
+                          <div className="absolute top-1 right-1 bg-primary text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                             ✓
                           </div>
                         )}
                       </div>
                     </button>
-                    <div className="p-4">
-                      <h3 className="font-bold text-neutral-dark text-center mb-2 line-clamp-2">
+                    <div className="p-2">
+                      <h3 className="font-bold text-neutral-dark text-xs text-center mb-1 line-clamp-2 min-h-[32px]">
                         {artist.name}
                       </h3>
-                      {artist.genres && artist.genres.length > 0 && (
-                        <p className="text-xs text-gray-500 text-center mb-3 line-clamp-1">
-                          {artist.genres.slice(0, 2).join(', ')}
-                        </p>
-                      )}
                       <button
                         onClick={() => toggleFollow(artist)}
-                        className={`w-full py-2 rounded-lg font-medium transition ${
+                        className={`w-full py-1.5 rounded text-xs font-medium transition ${
                           isFollowed(artist.id)
                             ? 'bg-primary-dark text-white hover:bg-primary'
                             : 'bg-secondary text-white hover:bg-secondary-light'
