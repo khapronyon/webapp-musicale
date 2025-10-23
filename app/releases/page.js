@@ -5,24 +5,26 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { Calendar } from 'lucide-react';
+
+const CACHE_KEY = 'releases_cache';
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minuti
 
 export default function ReleasesPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [releases, setReleases] = useState([]);
-  const [filteredReleases, setFilteredReleases] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState('all');
+  const [filter, setFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('30');
+  const [progressCount, setProgressCount] = useState(0);
+  const [totalArtists, setTotalArtists] = useState(0);
 
   useEffect(() => {
-    checkUserAndLoad();
+    checkUser();
   }, []);
 
-  useEffect(() => {
-    filterReleases();
-  }, [releases, filterType]);
-
-  async function checkUserAndLoad() {
+  async function checkUser() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       router.push('/auth/login');
@@ -32,260 +34,407 @@ export default function ReleasesPage() {
     loadReleases(user);
   }
 
-  async function loadReleases(user) {
-    setLoading(true);
+  function loadFromCache() {
     try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+
+      const { data, timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+
+      // Se cache è valida (< 30 min)
+      if (age < CACHE_DURATION) {
+        console.log('✅ Cache valida! Caricamento istantaneo');
+        return data;
+      }
+
+      console.log('⏰ Cache scaduta, ricarico...');
+      return null;
+    } catch (error) {
+      console.error('Errore cache:', error);
+      return null;
+    }
+  }
+
+  function saveToCache(data) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.error('Errore salvataggio cache:', error);
+    }
+  }
+
+  async function loadReleases(user) {
+    try {
+      // 1. PROVA CACHE PRIMA (INSTANT!)
+      const cachedReleases = loadFromCache();
+      if (cachedReleases) {
+        setReleases(cachedReleases);
+        setLoading(false);
+        // Continua a ricaricare in background per aggiornare
+        loadReleasesFromAPI(user, true);
+        return;
+      }
+
+      // 2. Nessuna cache, carica da API
+      await loadReleasesFromAPI(user, false);
+
+    } catch (error) {
+      console.error('Errore caricamento release:', error);
+      setLoading(false);
+    }
+  }
+
+  async function loadReleasesFromAPI(user, isBackgroundUpdate) {
+    try {
+      // Ottieni artisti seguiti
       const { data: followedArtists } = await supabase
         .from('followed_artists')
-        .select('artist_id, artist_name, artist_image')
+        .select('*')
         .eq('user_id', user.id);
 
       if (!followedArtists || followedArtists.length === 0) {
-        setReleases([]);
         setLoading(false);
         return;
       }
 
-      const allReleases = [];
-      for (const artist of followedArtists) {
-        try {
-          const response = await fetch(`/api/spotify/artist-releases?artist_id=${artist.artist_id}`);
-          const data = await response.json();
+      setTotalArtists(followedArtists.length);
+      console.log(`📊 Caricamento ${followedArtists.length} artisti...`);
 
-          if (data.releases && data.releases.length > 0) {
-            const releasesWithArtist = data.releases.map(release => ({
-              ...release,
-              artistName: artist.artist_name,
-              artistImage: artist.artist_image,
-            }));
-            allReleases.push(...releasesWithArtist);
-          }
-        } catch (error) {
-          console.error(`Errore release per ${artist.artist_name}:`, error);
+      // PROGRESSIVE LOADING - mostra man mano che arrivano
+      const allReleases = [];
+      let completed = 0;
+
+      // Dividi in batch di 5 artisti
+      const batchSize = 5;
+      for (let i = 0; i < followedArtists.length; i += batchSize) {
+        const batch = followedArtists.slice(i, i + batchSize);
+        
+        const promises = batch.map(artist => 
+          fetch(`/api/spotify/artist-releases?artist_id=${artist.artist_id}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data?.releases) {
+                return data.releases.map(release => ({
+                  ...release,
+                  artist_name: artist.artist_name,
+                  artist_id: artist.artist_id,
+                  artist_image: artist.artist_image,
+                }));
+              }
+              return [];
+            })
+            .catch(() => [])
+        );
+
+        const batchResults = await Promise.all(promises);
+        const batchReleases = batchResults.flat();
+        allReleases.push(...batchReleases);
+
+        completed += batch.length;
+        setProgressCount(completed);
+
+        // Aggiorna UI progressivamente
+        if (!isBackgroundUpdate) {
+          const sorted = allReleases
+            .sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+            .filter((release, index, self) => 
+              index === self.findIndex(r => r.id === release.id)
+            );
+          setReleases(sorted);
         }
       }
 
-      allReleases.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-      setReleases(allReleases);
+      // Finale
+      const sortedReleases = allReleases
+        .sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+        .filter((release, index, self) => 
+          index === self.findIndex(r => r.id === release.id)
+        );
+
+      setReleases(sortedReleases);
+      saveToCache(sortedReleases);
+      console.log(`✅ ${sortedReleases.length} release caricate e salvate in cache`);
+
     } catch (error) {
-      console.error('Errore caricamento release:', error);
-      alert('Errore durante il caricamento delle release. Riprova.');
+      console.error('Errore API:', error);
     } finally {
       setLoading(false);
     }
   }
 
-  function filterReleases() {
-    if (filterType === 'all') {
-      setFilteredReleases(releases);
-    } else {
-      setFilteredReleases(releases.filter(release => release.type === filterType));
-    }
-  }
+  function getFilteredReleases() {
+    let filtered = releases;
 
-  function formatDate(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Filtro temporale
+    if (timeFilter !== 'all') {
+      const now = new Date();
+      const days = parseInt(timeFilter);
+      const cutoffDate = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
 
-    if (diffDays < 7) {
-      return `${diffDays} ${diffDays === 1 ? 'giorno' : 'giorni'} fa`;
-    } else if (diffDays < 30) {
-      const weeks = Math.floor(diffDays / 7);
-      return `${weeks} ${weeks === 1 ? 'settimana' : 'settimane'} fa`;
-    } else if (diffDays < 365) {
-      const months = Math.floor(diffDays / 30);
-      return `${months} ${months === 1 ? 'mese' : 'mesi'} fa`;
+      filtered = filtered.filter(release => {
+        const releaseDate = new Date(release.releaseDate);
+        return releaseDate >= cutoffDate;
+      });
     }
+
+    // Filtro tipo
+    if (filter === 'all') return filtered;
     
-    return date.toLocaleDateString('it-IT', { 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
+    return filtered.filter(release => {
+      const type = release.type.toLowerCase();
+      
+      if (filter === 'albums') {
+        return type === 'album' || type === 'compilation';
+      }
+      
+      if (filter === 'singles') {
+        return type === 'single';
+      }
+      
+      return true;
     });
   }
 
-  function getTypeLabel(type) {
-    const labels = {
-      'album': 'Album',
-      'single': 'Singolo',
-      'compilation': 'Compilation'
-    };
-    return labels[type] || type;
+  function getReleaseCounts() {
+    const filtered = getFilteredReleases();
+    
+    const albums = filtered.filter(r => {
+      const type = r.type.toLowerCase();
+      return type === 'album' || type === 'compilation';
+    }).length;
+
+    const singles = filtered.filter(r => {
+      const type = r.type.toLowerCase();
+      return type === 'single';
+    }).length;
+
+    return { total: filtered.length, albums, singles };
   }
 
-  function getTypeColor(type) {
-    const colors = {
-      'album': 'bg-primary text-white border-2 border-primary-dark',
-      'single': 'bg-secondary text-white border-2 border-secondary',
-      'compilation': 'bg-primary-dark text-white border-2 border-primary'
-    };
-    return colors[type] || 'bg-gray-500 text-white border-2 border-gray-700';
+  function isNew(releaseDate) {
+    const release = new Date(releaseDate);
+    const now = new Date();
+    const daysDiff = Math.floor((now - release) / (1000 * 60 * 60 * 24));
+    return daysDiff <= 7;
   }
 
-  const stats = {
-    total: releases.length,
-    albums: releases.filter(r => r.type === 'album').length,
-    singles: releases.filter(r => r.type === 'single').length,
-  };
+  async function openRelease(release) {
+    if (user) {
+      try {
+        await supabase
+          .from('viewed_releases')
+          .insert({
+            user_id: user.id,
+            release_id: release.id,
+            artist_id: release.artist_id,
+          });
+      } catch (error) {
+        // Ignora
+      }
+    }
+    window.open(release.spotifyUrl, '_blank');
+  }
+
+  const filteredReleases = getFilteredReleases();
+  const counts = getReleaseCounts();
+
+  // Loading con progress
+  if (loading && releases.length === 0) {
+    return (
+      <div className="min-h-screen bg-neutral-light flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-bounce">🎵</div>
+          <p className="text-gray-600 mb-2">Caricamento release...</p>
+          {totalArtists > 0 && (
+            <p className="text-sm text-gray-500">
+              {progressCount} / {totalArtists} artisti
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-neutral-light">
+    <div className="min-h-screen bg-neutral-light pb-20">
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-neutral-dark mb-2">Nuove Release</h1>
-        <p className="text-gray-600 mb-8">
-          Le ultime uscite degli artisti che segui
-        </p>
-
-        {!loading && releases.length > 0 && (
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="bg-white rounded-lg shadow-md p-4 border-2 border-primary-light">
-              <p className="text-gray-500 text-sm">Totale</p>
-              <p className="text-2xl font-bold text-primary">{stats.total}</p>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold text-neutral-dark">Nuove Release</h1>
+          {loading && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
+              Aggiornamento...
             </div>
-            <div className="bg-primary rounded-lg shadow-md p-4 border-2 border-primary-dark">
-              <p className="text-white text-sm font-medium">Album</p>
-              <p className="text-3xl font-bold text-white">{stats.albums}</p>
-            </div>
-            <div className="bg-secondary rounded-lg shadow-md p-4 border-2 border-secondary">
-              <p className="text-white text-sm font-medium">Singoli</p>
-              <p className="text-3xl font-bold text-white">{stats.singles}</p>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
+        <p className="text-gray-600 mb-8">Le ultime uscite degli artisti che segui</p>
 
-        {!loading && releases.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-8">
-            <button
-              onClick={() => setFilterType('all')}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                filterType === 'all'
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
-              }`}
-            >
-              Tutti ({stats.total})
-            </button>
-            <button
-              onClick={() => setFilterType('album')}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                filterType === 'album'
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
-              }`}
-            >
-              Album ({stats.albums})
-            </button>
-            <button
-              onClick={() => setFilterType('single')}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                filterType === 'single'
-                  ? 'bg-secondary text-white'
-                  : 'bg-white text-neutral-dark hover:bg-secondary hover:bg-opacity-20 border-2 border-secondary'
-              }`}
-            >
-              Singoli ({stats.singles})
-            </button>
-          </div>
-        )}
-
-        {loading && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4 animate-bounce">🎵</div>
-            <p className="text-gray-600">Caricamento release...</p>
-          </div>
-        )}
-
-        {!loading && releases.length === 0 && (
+        {releases.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow-md border-2 border-primary-light">
-            <p className="text-6xl mb-4">📀</p>
+            <p className="text-6xl mb-4">🎵</p>
             <h2 className="text-xl font-bold text-neutral-dark mb-2">
-              Nessuna release trovata
+              Nessuna release disponibile
             </h2>
-            <p className="text-gray-600 mb-6">
-              Segui alcuni artisti per vedere le loro ultime uscite!
+            <p className="text-gray-600 mb-4">
+              Segui alcuni artisti per vedere le loro nuove uscite!
             </p>
             <button
               onClick={() => router.push('/artists')}
-              className="px-6 py-3 bg-primary hover:bg-primary-light text-white rounded-lg transition font-medium"
+              className="px-6 py-3 bg-primary hover:bg-primary-light text-white rounded-lg font-medium transition"
             >
-              Cerca Artisti
+              Vai agli Artisti
             </button>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-primary-light">
+                <p className="text-sm text-gray-600 mb-1">Totale</p>
+                <p className="text-4xl font-bold text-primary">{counts.total}</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-primary">
+                <p className="text-sm text-gray-600 mb-1">Album</p>
+                <p className="text-4xl font-bold text-primary">{counts.albums}</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-secondary">
+                <p className="text-sm text-gray-600 mb-1">Singoli</p>
+                <p className="text-4xl font-bold text-secondary">{counts.singles}</p>
+              </div>
+            </div>
 
-        {!loading && releases.length > 0 && filteredReleases.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-6xl mb-4">🔍</p>
-            <p className="text-gray-500">
-              Nessuna release trovata con questo filtro.
-            </p>
-          </div>
-        )}
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6 pb-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Calendar size={18} className="text-gray-500" />
+                <select
+                  value={timeFilter}
+                  onChange={(e) => setTimeFilter(e.target.value)}
+                  className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white"
+                >
+                  <option value="7">Ultimi 7 giorni</option>
+                  <option value="30">Ultimo mese</option>
+                  <option value="90">Ultimi 3 mesi</option>
+                  <option value="all">Tutte</option>
+                </select>
+              </div>
 
-        {!loading && filteredReleases.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {filteredReleases.map((release) => (
-              <a
-                key={release.id}
-                href={release.spotifyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group border-2 border-transparent hover:border-primary"
-              >
-                <div className="aspect-square overflow-hidden bg-gray-200 relative">
-                  {release.image ? (
-                    <img
-                      src={release.image}
-                      alt={release.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-6xl">
-                      💿
-                    </div>
-                  )}
-                  {(() => {
-                    const releaseDate = new Date(release.releaseDate);
-                    const now = new Date();
-                    const diffDays = Math.ceil((now - releaseDate) / (1000 * 60 * 60 * 24));
-                    return diffDays <= 30 && (
-                      <div className="absolute top-2 right-2 bg-secondary text-white text-xs font-bold px-2 py-1 rounded-full">
-                        NEW
+              <div className="flex gap-2 flex-1 sm:justify-end">
+                <button
+                  onClick={() => setFilter('all')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    filter === 'all'
+                      ? 'bg-primary text-white'
+                      : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
+                  }`}
+                >
+                  Tutti
+                </button>
+                <button
+                  onClick={() => setFilter('albums')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    filter === 'albums'
+                      ? 'bg-primary text-white'
+                      : 'bg-white text-neutral-dark hover:bg-primary hover:bg-opacity-20 border-2 border-primary'
+                  }`}
+                >
+                  Album
+                </button>
+                <button
+                  onClick={() => setFilter('singles')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    filter === 'singles'
+                      ? 'bg-secondary text-white'
+                      : 'bg-white text-neutral-dark hover:bg-secondary hover:bg-opacity-20 border-2 border-secondary'
+                  }`}
+                >
+                  Singoli
+                </button>
+              </div>
+            </div>
+
+            {/* Releases Grid */}
+            {filteredReleases.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-lg shadow-md">
+                <p className="text-6xl mb-4">🔍</p>
+                <h2 className="text-xl font-bold text-neutral-dark mb-2">
+                  Nessuna release in questo periodo
+                </h2>
+                <p className="text-gray-600">
+                  Prova a cambiare il filtro temporale
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {filteredReleases.map((release) => {
+                  const releaseType = release.type.toLowerCase();
+                  const isAlbum = releaseType === 'album' || releaseType === 'compilation';
+                  
+                  return (
+                    <div
+                      key={release.id}
+                      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group cursor-pointer border-2 border-transparent hover:border-primary relative"
+                      onClick={() => openRelease(release)}
+                    >
+                      {isNew(release.releaseDate) && (
+                        <div className="absolute top-2 right-2 bg-secondary text-white text-xs font-bold px-2 py-1 rounded-full z-10 animate-pulse">
+                          NEW
+                        </div>
+                      )}
+
+                      <div className="aspect-square overflow-hidden bg-gray-200">
+                        <img
+                          src={release.image}
+                          alt={release.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          loading="lazy"
+                        />
                       </div>
-                    );
-                  })()}
-                </div>
 
-                <div className="p-3">
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-2 ${getTypeColor(release.type)}`}>
-                    {getTypeLabel(release.type)}
-                  </span>
+                      <div className="p-4">
+                        <span className={`inline-block px-2 py-1 text-xs font-bold rounded mb-2 ${
+                          isAlbum
+                            ? 'bg-primary text-white'
+                            : 'bg-secondary text-white'
+                        }`}>
+                          {release.type}
+                        </span>
 
-                  <h3 className="font-bold text-neutral-dark text-sm mb-1 line-clamp-2">
-                    {release.name}
-                  </h3>
+                        <h3 className="font-bold text-neutral-dark mb-1 line-clamp-2">
+                          {release.name}
+                        </h3>
 
-                  <p className="text-xs text-gray-600 mb-2 line-clamp-1">
-                    {release.artistName}
-                  </p>
+                        <p className="text-sm text-gray-600 mb-1 line-clamp-1">
+                          {release.artist_name}
+                        </p>
 
-                  <p className="text-xs text-gray-400">
-                    {formatDate(release.releaseDate)}
-                  </p>
+                        <p className="text-xs text-gray-500">
+                          {isNew(release.releaseDate) && '🔥 '}
+                          {new Date(release.releaseDate).toLocaleDateString('it-IT', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </p>
 
-                  {release.totalTracks > 1 && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {release.totalTracks} brani
-                    </p>
-                  )}
-                </div>
-              </a>
-            ))}
-          </div>
+                        {release.totalTracks && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            {release.totalTracks} {release.totalTracks === 1 ? 'brano' : 'brani'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </main>
 
