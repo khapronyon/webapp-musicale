@@ -248,7 +248,7 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
               {releases.map((release) => {
                 const releaseType = release.type?.toLowerCase() || '';
                 const isAlbum = releaseType === 'album' || releaseType === 'compilation';
@@ -261,7 +261,7 @@ export default function HomePage() {
                   >
                     {/* Badge NEW */}
                     {isNew(release.releaseDate) && (
-                      <div className="absolute top-2 right-2 bg-secondary text-white text-xs font-bold px-2 py-1 rounded-full z-10 animate-pulse">
+                      <div className="absolute top-1 right-1 bg-secondary text-white text-xs font-bold px-1.5 py-0.5 rounded-full z-10 animate-pulse">
                         NEW
                       </div>
                     )}
@@ -277,9 +277,9 @@ export default function HomePage() {
                     </div>
 
                     {/* Info */}
-                    <div className="p-3">
+                    <div className="p-2 md:p-3">
                       {/* Badge Type */}
-                      <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded mb-2 ${
+                      <span className={`inline-block px-1.5 py-0.5 text-xs font-bold rounded mb-1 ${
                         isAlbum
                           ? 'bg-primary text-white'
                           : 'bg-secondary text-white'
@@ -288,7 +288,7 @@ export default function HomePage() {
                       </span>
 
                       {/* Title */}
-                      <h3 className="font-bold text-neutral-dark text-sm mb-1 line-clamp-2">
+                      <h3 className="font-bold text-neutral-dark text-xs md:text-sm mb-1 line-clamp-2">
                         {release.name}
                       </h3>
 

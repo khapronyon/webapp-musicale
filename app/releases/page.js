@@ -293,42 +293,42 @@ export default function ReleasesPage() {
           </div>
         ) : (
           <>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-primary-light">
-                <p className="text-sm text-gray-600 mb-1">Totale</p>
-                <p className="text-4xl font-bold text-primary">{counts.total}</p>
+            {/* Stats Cards - RESPONSIVE */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-2 border-primary-light">
+                <p className="text-xs md:text-sm text-gray-600 mb-1">Totale</p>
+                <p className="text-3xl md:text-4xl font-bold text-primary">{counts.total}</p>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-primary">
-                <p className="text-sm text-gray-600 mb-1">Album</p>
-                <p className="text-4xl font-bold text-primary">{counts.albums}</p>
+              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-2 border-primary">
+                <p className="text-xs md:text-sm text-gray-600 mb-1">Album</p>
+                <p className="text-3xl md:text-4xl font-bold text-primary">{counts.albums}</p>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-md border-2 border-secondary">
-                <p className="text-sm text-gray-600 mb-1">Singoli</p>
-                <p className="text-4xl font-bold text-secondary">{counts.singles}</p>
+              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-2 border-secondary">
+                <p className="text-xs md:text-sm text-gray-600 mb-1">Singoli</p>
+                <p className="text-3xl md:text-4xl font-bold text-secondary">{counts.singles}</p>
               </div>
             </div>
 
-            {/* Filters */}
+            {/* Filters - COMPATTI MOBILE */}
             <div className="flex flex-col sm:flex-row gap-3 mb-6 pb-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <Calendar size={18} className="text-gray-500" />
                 <select
                   value={timeFilter}
                   onChange={(e) => setTimeFilter(e.target.value)}
-                  className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white"
+                  className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-primary transition bg-white text-sm"
                 >
-                  <option value="7">Ultimi 7 giorni</option>
-                  <option value="30">Ultimo mese</option>
-                  <option value="90">Ultimi 3 mesi</option>
+                  <option value="7">7 giorni</option>
+                  <option value="30">30 giorni</option>
+                  <option value="90">90 giorni</option>
                   <option value="all">Tutte</option>
                 </select>
               </div>
 
-              <div className="flex gap-2 flex-1 sm:justify-end">
+              <div className="flex gap-2 flex-1 justify-start sm:justify-end overflow-x-auto pb-2 sm:pb-0">
                 <button
                   onClick={() => setFilter('all')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                  className={`px-3 md:px-4 py-2 rounded-lg font-medium transition text-sm whitespace-nowrap ${
                     filter === 'all'
                       ? 'bg-primary text-white'
                       : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
@@ -338,7 +338,7 @@ export default function ReleasesPage() {
                 </button>
                 <button
                   onClick={() => setFilter('albums')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                  className={`px-3 md:px-4 py-2 rounded-lg font-medium transition text-sm whitespace-nowrap ${
                     filter === 'albums'
                       ? 'bg-primary text-white'
                       : 'bg-white text-neutral-dark hover:bg-primary hover:bg-opacity-20 border-2 border-primary'
@@ -348,7 +348,7 @@ export default function ReleasesPage() {
                 </button>
                 <button
                   onClick={() => setFilter('singles')}
-                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                  className={`px-3 md:px-4 py-2 rounded-lg font-medium transition text-sm whitespace-nowrap ${
                     filter === 'singles'
                       ? 'bg-secondary text-white'
                       : 'bg-white text-neutral-dark hover:bg-secondary hover:bg-opacity-20 border-2 border-secondary'
@@ -371,7 +371,7 @@ export default function ReleasesPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4">
                 {filteredReleases.map((release) => {
                   const releaseType = release.type.toLowerCase();
                   const isAlbum = releaseType === 'album' || releaseType === 'compilation';
@@ -383,7 +383,7 @@ export default function ReleasesPage() {
                       onClick={() => openRelease(release)}
                     >
                       {isNew(release.releaseDate) && (
-                        <div className="absolute top-2 right-2 bg-secondary text-white text-xs font-bold px-2 py-1 rounded-full z-10 animate-pulse">
+                        <div className="absolute top-1 right-1 bg-secondary text-white text-xs font-bold px-1.5 py-0.5 rounded-full z-10 animate-pulse">
                           NEW
                         </div>
                       )}
@@ -397,8 +397,8 @@ export default function ReleasesPage() {
                         />
                       </div>
 
-                      <div className="p-4">
-                        <span className={`inline-block px-2 py-1 text-xs font-bold rounded mb-2 ${
+                      <div className="p-2 md:p-4">
+                        <span className={`inline-block px-1.5 py-0.5 text-xs font-bold rounded mb-1 ${
                           isAlbum
                             ? 'bg-primary text-white'
                             : 'bg-secondary text-white'
@@ -406,11 +406,11 @@ export default function ReleasesPage() {
                           {release.type}
                         </span>
 
-                        <h3 className="font-bold text-neutral-dark mb-1 line-clamp-2">
+                        <h3 className="font-bold text-neutral-dark text-xs md:text-sm mb-1 line-clamp-2">
                           {release.name}
                         </h3>
 
-                        <p className="text-sm text-gray-600 mb-1 line-clamp-1">
+                        <p className="text-xs text-gray-600 mb-1 line-clamp-1">
                           {release.artist_name}
                         </p>
 
