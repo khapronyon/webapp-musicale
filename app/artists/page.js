@@ -231,7 +231,7 @@ export default function ArtistsPage() {
             {!loading && searchResults.length === 0 && searchQuery && (
               <div className="text-center py-12">
                 <p className="text-6xl mb-4">🔍</p>
-                <p className="text-gray-500">Nessun risultato trovato per "{searchQuery}"</p>
+                <p className="text-gray-500">Nessun risultato trovato per &ldquo;{searchQuery}&rdquo;</p>
               </div>
             )}
 
