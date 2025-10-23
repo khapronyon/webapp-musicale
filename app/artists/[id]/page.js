@@ -192,29 +192,22 @@ export default function ArtistDetailPage({ params }) {
   }
 
   async function loadNews() {
-    // Mock data - in produzione useresti NewsAPI filtrato per nome artista
-    const mockNews = [
-      {
-        id: '1',
-        title: `${artist?.name} annuncia nuovo tour mondiale 2026`,
-        snippet: 'L\'artista ha rivelato le date del tour che toccherà le principali città europee e americane, con partenza prevista per la prossima primavera.',
-        image: 'https://placehold.co/600x400/667eea/ffffff?text=Tour+News',
-        source: 'Rolling Stone',
-        link: 'https://rollingstone.it',
-        publishedAt: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        title: `Intervista esclusiva: ${artist?.name} parla del nuovo album`,
-        snippet: 'In un\'intervista approfondita, l\'artista racconta il processo creativo dietro il suo ultimo lavoro e i progetti futuri.',
-        image: 'https://placehold.co/600x400/764ba2/ffffff?text=Interview',
-        source: 'Billboard',
-        link: 'https://billboard.com',
-        publishedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-      },
-    ];
-    
-    setNews(mockNews);
+    try {
+      const response = await fetch(`/api/artist-news?artist=${encodeURIComponent(artist.name)}&pageSize=20`);
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error('Error loading artist news:', data.error);
+        setNews([]);
+        return;
+      }
+      
+      console.log(`✅ Loaded ${data.articles.length} news for ${artist.name}`);
+      setNews(data.articles || []);
+    } catch (error) {
+      console.error('Errore caricamento news:', error);
+      setNews([]);
+    }
   }
 
   async function loadConcerts() {
@@ -572,7 +565,7 @@ export default function ArtistDetailPage({ params }) {
                     {news.map((article) => (
                       <a
                         key={article.id}
-                        href={article.link}
+                        href={article.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="block bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
@@ -583,21 +576,34 @@ export default function ArtistDetailPage({ params }) {
                               src={article.image}
                               alt={article.title}
                               className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                e.target.src = 'https://placehold.co/800x450/667eea/ffffff?text=News';
+                              }}
                             />
                           </div>
-                          <div className="flex-1 p-6">
+                          <div className="flex-1 p-4 md:p-6">
                             <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
                               <span className="font-medium text-primary">{article.source}</span>
                               <span>•</span>
-                              <span>{new Date(article.publishedAt).toLocaleDateString('it-IT')}</span>
+                              <span>{new Date(article.publishedAt).toLocaleDateString('it-IT', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })}</span>
                             </div>
-                            <h3 className="text-xl font-bold text-neutral-dark mb-2 line-clamp-2">
+                            <h3 className="text-lg md:text-xl font-bold text-neutral-dark mb-2 line-clamp-2">
                               {article.title}
                             </h3>
-                            <p className="text-gray-600 line-clamp-3">
-                              {article.snippet}
+                            <p className="text-gray-600 text-sm md:text-base mb-3 line-clamp-3">
+                              {article.description}
                             </p>
-                            <div className="mt-4 flex items-center gap-2 text-primary font-medium">
+                            {article.author && (
+                              <p className="text-xs text-gray-500 mb-3">
+                                {article.author}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 text-primary font-medium text-sm">
                               Leggi articolo
                               <ExternalLink size={16} />
                             </div>
