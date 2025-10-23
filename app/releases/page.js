@@ -293,19 +293,19 @@ export default function ReleasesPage() {
           </div>
         ) : (
           <>
-            {/* Stats Cards - RESPONSIVE */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-2 border-primary-light">
+            {/* Stats Cards - SEMPRE 3 COLONNE */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+              <div className="bg-white p-3 md:p-6 rounded-lg shadow-md border-2 border-primary-light">
                 <p className="text-xs md:text-sm text-gray-600 mb-1">Totale</p>
-                <p className="text-3xl md:text-4xl font-bold text-primary">{counts.total}</p>
+                <p className="text-2xl md:text-4xl font-bold text-primary">{counts.total}</p>
               </div>
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-2 border-primary">
+              <div className="bg-white p-3 md:p-6 rounded-lg shadow-md border-2 border-primary">
                 <p className="text-xs md:text-sm text-gray-600 mb-1">Album</p>
-                <p className="text-3xl md:text-4xl font-bold text-primary">{counts.albums}</p>
+                <p className="text-2xl md:text-4xl font-bold text-primary">{counts.albums}</p>
               </div>
-              <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border-2 border-secondary">
+              <div className="bg-white p-3 md:p-6 rounded-lg shadow-md border-2 border-secondary">
                 <p className="text-xs md:text-sm text-gray-600 mb-1">Singoli</p>
-                <p className="text-3xl md:text-4xl font-bold text-secondary">{counts.singles}</p>
+                <p className="text-2xl md:text-4xl font-bold text-secondary">{counts.singles}</p>
               </div>
             </div>
 

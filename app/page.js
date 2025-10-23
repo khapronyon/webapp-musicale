@@ -71,7 +71,7 @@ export default function HomePage() {
         
         const recentFromCache = cachedReleases
           .filter(r => new Date(r.releaseDate) >= thirtyDaysAgo)
-          .slice(0, 5);
+          .slice(0, 6); // Mostra 6 release
 
         setReleases(recentFromCache);
         setLoading(false);
@@ -130,8 +130,8 @@ export default function HomePage() {
       // Salva tutte le release in cache per la pagina Release
       saveToCache(recentReleases);
 
-      // Mostra solo prime 5 sulla homepage
-      setReleases(recentReleases.slice(0, 5));
+      // Mostra solo prime 6 sulla homepage
+      setReleases(recentReleases.slice(0, 6));
 
     } catch (error) {
       console.error('Errore homepage:', error);
@@ -220,8 +220,8 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {[...Array(5)].map((_, i) => (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
+              {[...Array(6)].map((_, i) => (
                 <div key={i} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
                   <div className="aspect-square bg-gray-200"></div>
                   <div className="p-4">
