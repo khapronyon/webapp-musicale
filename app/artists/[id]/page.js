@@ -485,46 +485,70 @@ export default function ArtistDetailPage({ params }) {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {releases.map((release) => (
-                      <div
-                        key={release.id}
-                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group cursor-pointer border-2 border-transparent hover:border-primary"
-                        onClick={() => openRelease(release)}
-                      >
-                        <div className="aspect-square overflow-hidden bg-gray-200">
-                          <img
-                            src={release.image}
-                            alt={release.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                          />
-                        </div>
-                        <div className="p-4">
-                          <span className={`inline-block px-2 py-1 text-xs font-bold rounded mb-2 ${
-                            release.type.toLowerCase() === 'album' || release.type.toLowerCase() === 'compilation'
-                              ? 'bg-primary text-white'
-                              : 'bg-secondary text-white'
-                          }`}>
-                            {release.type}
-                          </span>
-                          <h3 className="font-bold text-neutral-dark mb-1 line-clamp-2">
-                            {release.name}
-                          </h3>
-                          <p className="text-sm text-gray-600 mb-2">
-                            {new Date(release.releaseDate).toLocaleDateString('it-IT', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </p>
-                          {release.totalTracks && (
-                            <p className="text-xs text-gray-500">
-                              {release.totalTracks} {release.totalTracks === 1 ? 'brano' : 'brani'}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4">
+                    {releases.map((release) => {
+                      const releaseType = release.type?.toLowerCase() || '';
+                      const isAlbum = releaseType === 'album' || releaseType === 'compilation';
+                      
+                      return (
+                        <div
+                          key={release.id}
+                          className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition group cursor-pointer border-2 border-transparent hover:border-primary relative"
+                          onClick={() => openRelease(release)}
+                        >
+                          {/* Badge NEW */}
+                          {(() => {
+                            const daysSinceRelease = Math.floor(
+                              (Date.now() - new Date(release.releaseDate)) / (1000 * 60 * 60 * 24)
+                            );
+                            return daysSinceRelease <= 7 ? (
+                              <div className="absolute top-1 right-1 bg-secondary text-white text-xs font-bold px-1.5 py-0.5 rounded-full z-10 animate-pulse">
+                                NEW
+                              </div>
+                            ) : null;
+                          })()}
+
+                          {/* Cover */}
+                          <div className="aspect-square overflow-hidden bg-gray-200">
+                            <img
+                              src={release.image}
+                              alt={release.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                              loading="lazy"
+                            />
+                          </div>
+
+                          {/* Info */}
+                          <div className="p-2 md:p-4">
+                            <span className={`inline-block px-1.5 py-0.5 text-xs font-bold rounded mb-1 ${
+                              isAlbum
+                                ? 'bg-primary text-white'
+                                : 'bg-secondary text-white'
+                            }`}>
+                              {release.type}
+                            </span>
+                            
+                            <h3 className="font-bold text-neutral-dark text-xs md:text-sm mb-1 line-clamp-2">
+                              {release.name}
+                            </h3>
+                            
+                            <p className="text-xs text-gray-600 mb-1">
+                              {new Date(release.releaseDate).toLocaleDateString('it-IT', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
                             </p>
-                          )}
+                            
+                            {release.totalTracks && (
+                              <p className="text-xs text-gray-500">
+                                {release.totalTracks} {release.totalTracks === 1 ? 'brano' : 'brani'}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
