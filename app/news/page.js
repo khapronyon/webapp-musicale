@@ -5,17 +5,13 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { ExternalLink, Calendar, Filter } from 'lucide-react';
-
-const CACHE_KEY = 'news_cache';
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minuti
+import { ExternalLink, Calendar, Heart, Bookmark, Share2 } from 'lucide-react';
 
 export default function NewsPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState('all');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -26,15 +22,11 @@ export default function NewsPage() {
     checkUser();
   }, []);
 
-  useEffect(() => {
-    loadNews(true);
-  }, [category]);
-
-  // Infinite scroll
+  // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && user) {
           loadMore();
         }
       },
@@ -50,7 +42,7 @@ export default function NewsPage() {
         observer.unobserve(observerTarget.current);
       }
     };
-  }, [hasMore, loadingMore]);
+  }, [hasMore, loadingMore, user]);
 
   async function checkUser() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -59,99 +51,100 @@ export default function NewsPage() {
       return;
     }
     setUser(user);
+    loadNews(user);
   }
 
-  function getCacheKey() {
-    return `${CACHE_KEY}_${category}`;
-  }
-
-  function loadFromCache() {
+  async function loadNews(currentUser) {
     try {
-      const cached = localStorage.getItem(getCacheKey());
-      if (!cached) return null;
+      setLoading(true);
 
-      const { data, timestamp } = JSON.parse(cached);
-      const age = Date.now() - timestamp;
+      // Ottieni artisti seguiti da Supabase client-side
+      const { data: followedArtists } = await supabase
+        .from('followed_artists')
+        .select('artist_name')
+        .eq('user_id', currentUser.id);
 
-      if (age < CACHE_DURATION) {
-        console.log('✅ News cache hit!');
-        return data;
-      }
+      const artistNames = followedArtists?.map(a => a.artist_name) || [];
+      
+      console.log(`📰 Sending ${artistNames.length} artists to API:`, artistNames);
 
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function saveToCache(data) {
-    try {
-      localStorage.setItem(getCacheKey(), JSON.stringify({
-        data,
-        timestamp: Date.now()
-      }));
-    } catch (error) {
-      console.error('Cache save error:', error);
-    }
-  }
-
-  async function loadNews(resetPage = false) {
-    try {
-      if (resetPage) {
-        setPage(1);
-        setArticles([]);
-        setLoading(true);
-      }
-
-      // Prova cache
-      const cached = loadFromCache();
-      if (cached && resetPage) {
-        setArticles(cached);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch da API
-      const currentPage = resetPage ? 1 : page;
-      const response = await fetch(`/api/news?category=${category}&page=${currentPage}&pageSize=20`);
+      // POST invece di GET, passa artisti nel body
+      const response = await fetch(`/api/personalized-news`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artistNames: artistNames,
+          page: 1,
+          pageSize: 10
+        })
+      });
+      
       const data = await response.json();
 
       if (data.error) {
-        throw new Error(data.error);
+        console.error('Error loading news:', data.error);
+        setArticles([]);
+        return;
       }
 
-      const newArticles = resetPage ? data.articles : [...articles, ...data.articles];
-      setArticles(newArticles);
-      setHasMore(newArticles.length < data.totalResults);
-
-      if (resetPage) {
-        saveToCache(data.articles);
+      console.log(`✅ Loaded ${data.articles.length} articles`);
+      console.log('📊 Response data:', data);
+      
+      // Debug warnings
+      if (data.mock) {
+        console.warn('⚠️⚠️⚠️ SHOWING MOCK DATA - Not real articles ⚠️⚠️⚠️');
       }
+      if (!data.followedArtistsCount || data.followedArtistsCount === 0) {
+        console.warn('⚠️⚠️⚠️ You are following 0 artists! ⚠️⚠️⚠️');
+      }
+      if (data.followedArtistsCount > 0 && data.mock) {
+        console.warn('⚠️⚠️⚠️ Following artists but still showing mock! Check API logs ⚠️⚠️⚠️');
+      }
+      
+      setArticles(data.articles || []);
+      setHasMore(data.articles.length >= 10);
 
     } catch (error) {
       console.error('Error loading news:', error);
-      alert('Errore caricamento news. Riprova.');
+      setArticles([]);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
   }
 
   async function loadMore() {
-    if (!hasMore || loadingMore) return;
+    if (!hasMore || loadingMore || !user) return;
     
     setLoadingMore(true);
     const nextPage = page + 1;
     setPage(nextPage);
 
     try {
-      const response = await fetch(`/api/news?category=${category}&page=${nextPage}&pageSize=20`);
+      // Ottieni artisti
+      const { data: followedArtists } = await supabase
+        .from('followed_artists')
+        .select('artist_name')
+        .eq('user_id', user.id);
+
+      const artistNames = followedArtists?.map(a => a.artist_name) || [];
+
+      const response = await fetch(`/api/personalized-news`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artistNames: artistNames,
+          page: nextPage,
+          pageSize: 10
+        })
+      });
+      
       const data = await response.json();
 
       if (data.error) throw new Error(data.error);
 
-      setArticles(prev => [...prev, ...data.articles]);
-      setHasMore(articles.length + data.articles.length < data.totalResults);
+      const newArticles = data.articles || [];
+      setArticles(prev => [...prev, ...newArticles]);
+      setHasMore(newArticles.length >= 10);
     } catch (error) {
       console.error('Error loading more:', error);
     } finally {
@@ -159,16 +152,12 @@ export default function NewsPage() {
     }
   }
 
-  function handleCategoryChange(newCategory) {
-    setCategory(newCategory);
-  }
-
-  if (loading && articles.length === 0) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-neutral-light flex items-center justify-center">
         <div className="text-center">
           <div className="text-6xl mb-4 animate-bounce">📰</div>
-          <p className="text-gray-600">Caricamento news...</p>
+          <p className="text-gray-600">Caricamento del tuo feed...</p>
         </div>
       </div>
     );
@@ -178,132 +167,179 @@ export default function NewsPage() {
     <div className="min-h-screen bg-neutral-light pb-20">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-neutral-dark mb-2">News Musicali</h1>
-        <p className="text-gray-600 mb-8">Le ultime notizie dal mondo della musica</p>
-
-        {/* Category Filters */}
-        <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-200 overflow-x-auto">
-          <Filter size={18} className="text-gray-500 flex-shrink-0" />
-          <div className="flex gap-2">
-            {[
-              { id: 'all', label: 'Tutte', icon: '🎵' },
-              { id: 'releases', label: 'Uscite', icon: '💿' },
-              { id: 'concerts', label: 'Concerti', icon: '🎤' },
-              { id: 'industry', label: 'Industria', icon: '💼' },
-            ].map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryChange(cat.id)}
-                className={`px-4 py-2 rounded-lg font-medium transition whitespace-nowrap text-sm ${
-                  category === cat.id
-                    ? 'bg-primary text-white'
-                    : 'bg-white text-neutral-dark hover:bg-primary-light hover:bg-opacity-20 border-2 border-primary-light'
-                }`}
-              >
-                {cat.icon} {cat.label}
-              </button>
-            ))}
-          </div>
+      <main className="max-w-2xl mx-auto px-0 sm:px-4 py-0 sm:py-8">
+        {/* Header Feed */}
+        <div className="bg-white p-4 sm:rounded-t-lg border-b border-gray-200 sticky top-0 z-10">
+          <h1 className="text-2xl font-bold text-neutral-dark">Il Tuo Feed</h1>
+          <p className="text-sm text-gray-600 mt-1">News personalizzate sui tuoi artisti</p>
         </div>
 
-        {/* Articles Grid */}
+        {/* Feed Verticale */}
         {articles.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow-md">
-            <p className="text-6xl mb-4">📰</p>
+          <div className="text-center py-12 bg-white sm:rounded-b-lg">
+            <p className="text-6xl mb-4">🎤</p>
             <h2 className="text-xl font-bold text-neutral-dark mb-2">
-              Nessuna news disponibile
+              Nessuna news nel tuo feed
             </h2>
-            <p className="text-gray-600">
-              Prova a cambiare categoria
+            <p className="text-gray-600 mb-4">
+              Segui alcuni artisti per ricevere news personalizzate!
             </p>
+            <button
+              onClick={() => router.push('/artists')}
+              className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-light transition"
+            >
+              Cerca Artisti
+            </button>
           </div>
         ) : (
-          <div className="space-y-6">
-            {articles.map((article, index) => (
-              <a
-                key={`${article.id}-${index}`}
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
-              >
-                <div className="flex flex-col md:flex-row">
-                  {/* Image */}
-                  <div className="md:w-1/3 aspect-video md:aspect-auto md:min-h-[250px] overflow-hidden bg-gray-200">
-                    <img
-                      src={article.image}
-                      alt={article.title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.target.src = 'https://placehold.co/800x450/667eea/ffffff?text=News';
-                      }}
-                    />
-                  </div>
+          <div className="space-y-0">
+            {articles.map((article, index) => {
+              return (
+                <React.Fragment key={`${article.id}-${index}`}>
+                  <article className="bg-white border-b border-gray-200 last:sm:rounded-b-lg">
+                    {/* Wrapper cliccabile per tutta la card */}
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block hover:bg-gray-50 transition"
+                    >
+                      {/* Source & Date */}
+                      <div className="px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">
+                            {article.source.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm text-neutral-dark">{article.source}</p>
+                            <p className="text-xs text-gray-500">
+                              {(() => {
+                                const date = new Date(article.publishedAt);
+                                const now = new Date();
+                                const diffMs = now - date;
+                                const diffMins = Math.floor(diffMs / 60000);
+                                const diffHours = Math.floor(diffMs / 3600000);
+                                const diffDays = Math.floor(diffMs / 86400000);
 
-                  {/* Content */}
-                  <div className="flex-1 p-4 md:p-6">
-                    {/* Source & Date */}
-                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                      <span className="font-medium text-primary">{article.source}</span>
-                      <span>•</span>
-                      <div className="flex items-center gap-1">
-                        <Calendar size={14} />
-                        <span>
-                          {new Date(article.publishedAt).toLocaleDateString('it-IT', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </span>
+                                if (diffMins < 60) return `${diffMins}m fa`;
+                                if (diffHours < 24) return `${diffHours}h fa`;
+                                if (diffDays < 7) return `${diffDays}g fa`;
+                                return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Image */}
+                      <div className="w-full aspect-[4/3] bg-gray-200 relative">
+                        <img
+                          src={article.image}
+                          alt={article.title}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.src = 'https://placehold.co/800x600/667eea/ffffff?text=News';
+                          }}
+                        />
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-4">
+                        {/* Title */}
+                        <h2 className="text-lg font-bold text-neutral-dark mb-2 line-clamp-3">
+                          {article.title}
+                        </h2>
+
+                        {/* Description */}
+                        {article.description && (
+                          <p className="text-gray-600 text-sm mb-3 line-clamp-3">
+                            {article.description}
+                          </p>
+                        )}
+
+                        {/* Author */}
+                        {article.author && (
+                          <p className="text-xs text-gray-500 mb-3">
+                            {article.author}
+                          </p>
+                        )}
+
+                        {/* Read More Indicator */}
+                        <div className="inline-flex items-center gap-2 text-primary font-medium text-sm">
+                          Leggi articolo
+                          <ExternalLink size={14} />
+                        </div>
+                      </div>
+                    </a>
+
+                    {/* Action Buttons - Outside link */}
+                    <div className="px-4 pb-4 flex items-center justify-between border-t border-gray-100 pt-3">
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 text-gray-600 hover:text-primary transition"
+                        >
+                          <Heart size={20} />
+                          <span className="text-sm font-medium">Mi piace</span>
+                        </button>
+                        <button 
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 text-gray-600 hover:text-primary transition"
+                        >
+                          <Bookmark size={20} />
+                          <span className="text-sm font-medium">Salva</span>
+                        </button>
+                      </div>
+                      <button 
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 text-gray-600 hover:text-primary transition"
+                      >
+                        <Share2 size={20} />
+                      </button>
+                    </div>
+                  </article>
+
+                  {/* [SPAZIO PUBBLICITÁ] - Ogni 5 articoli */}
+                  {(index + 1) % 5 === 0 && index !== articles.length - 1 && (
+                    <div className="bg-gray-50 border-y border-gray-200 p-6 text-center">
+                      <p className="text-xs text-gray-500 mb-2">PUBBLICITÀ</p>
+                      <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-8">
+                        <p className="text-gray-400">Spazio pubblicitario {Math.floor((index + 1) / 5)}</p>
                       </div>
                     </div>
-
-                    {/* Title */}
-                    <h3 className="text-lg md:text-xl font-bold text-neutral-dark mb-2 line-clamp-2">
-                      {article.title}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-gray-600 text-sm md:text-base mb-4 line-clamp-3">
-                      {article.description}
-                    </p>
-
-                    {/* Author */}
-                    {article.author && (
-                      <p className="text-xs text-gray-500 mb-3">
-                        {article.author}
-                      </p>
-                    )}
-
-                    {/* Read More Link */}
-                    <div className="flex items-center gap-2 text-primary font-medium text-sm">
-                      Leggi articolo completo
-                      <ExternalLink size={16} />
-                    </div>
-                  </div>
-                </div>
-              </a>
-            ))}
+                  )}
+                </React.Fragment>
+              );
+            })}
 
             {/* Loading More Indicator */}
             {loadingMore && (
-              <div className="text-center py-8">
+              <div className="text-center py-8 bg-white">
                 <div className="text-4xl mb-2 animate-bounce">📰</div>
-                <p className="text-gray-600">Caricamento altre news...</p>
+                <p className="text-gray-600 text-sm">Caricamento altre news...</p>
               </div>
             )}
 
             {/* Infinite Scroll Target */}
             {hasMore && <div ref={observerTarget} className="h-20"></div>}
 
-            {/* No More Articles */}
+            {/* End of Feed */}
             {!hasMore && articles.length > 0 && (
-              <div className="text-center py-8">
-                <p className="text-gray-500">
+              <div className="text-center py-8 bg-white sm:rounded-b-lg">
+                <p className="text-gray-500 text-sm">
                   Hai visualizzato tutte le news disponibili
                 </p>
+                <button
+                  onClick={() => {
+                    setPage(1);
+                    setArticles([]);
+                    loadNews(user);
+                  }}
+                  className="mt-4 px-4 py-2 text-primary hover:bg-primary-light hover:bg-opacity-10 rounded-lg transition text-sm font-medium"
+                >
+                  Ricarica feed
+                </button>
               </div>
             )}
           </div>

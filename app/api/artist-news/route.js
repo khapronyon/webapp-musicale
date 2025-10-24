@@ -23,12 +23,13 @@ export async function GET(request) {
       );
     }
 
-    // Query specifica per l'artista
-    const query = `"${artistName}" AND (music OR concert OR album OR tour OR song)`;
+    // Query semplificata per l'artista (più probabile trovare risultati)
+    const query = artistName;
     
     console.log(`📰 Fetching news for artist: ${artistName}`);
 
-    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=it,en&sortBy=publishedAt&page=${page}&pageSize=${pageSize}&apiKey=${NEWSAPI_KEY}`;
+    // Usa everything endpoint con query semplice
+    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&page=${page}&pageSize=${pageSize}&apiKey=${NEWSAPI_KEY}`;
 
     const response = await fetch(url);
     const data = await response.json();
