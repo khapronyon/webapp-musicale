@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Bell, User } from 'lucide-react';
+import { User } from 'lucide-react';
+import NotificationDropdown from './NotificationDropdown';
 
 export default function Header() {
   const router = useRouter();
@@ -45,15 +46,8 @@ export default function Header() {
 
           {/* Right Side: Notifications + User */}
           <div className="flex items-center gap-4">
-            {/* Notifications */}
-            {user && (
-              <button className="relative text-white hover:scale-110 transition-transform">
-                <Bell size={28} strokeWidth={2} />
-                <span className="absolute -top-1 -right-1 bg-secondary text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                  3
-                </span>
-              </button>
-            )}
+            {/* Notifications - Sostituito con NotificationDropdown */}
+            {user && <NotificationDropdown user={user} />}
 
             {/* User Menu */}
             {user ? (
