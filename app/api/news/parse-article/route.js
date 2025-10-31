@@ -1,9 +1,19 @@
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 
+// Suppress JSDOM CSS warnings (they're harmless)
+const originalConsoleError = console.error;
+const jsDomCssError = /Could not parse CSS stylesheet/;
+console.error = (...args) => {
+  if (args[0] && jsDomCssError.test(args[0])) {
+    return; // Ignore CSS parsing warnings
+  }
+  originalConsoleError(...args);
+};
+
 // Cache in-memory per articoli parsati
 const articleCache = new Map();
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 ore
+const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 giorni (articoli news non cambiano)
 
 export async function GET(request) {
   try {
@@ -41,29 +51,66 @@ export async function GET(request) {
       });
     }
 
+    console.log('🌐 Fetching fresh content...');
+
     // 3. Fetch HTML della pagina
     const startTime = Date.now();
     
-    const response = await fetch(articleUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow'
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 sec timeout per articoli complessi
+    
+    let html; // ✅ Dichiarata qui per essere accessibile fuori dal try
+    let fetchTime;
+    
+    try {
+      const response = await fetch(articleUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        redirect: 'follow',
+        signal: controller.signal
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      html = await response.text();
+      fetchTime = Date.now() - startTime;
+
+      console.log(`✅ HTML fetched in ${fetchTime}ms (${html.length} bytes)`);
+      
+      // 3.5. Pre-process: Remove heavy elements BEFORE JSDOM (speed optimization)
+      console.log('🧹 Cleaning HTML...');
+      html = html
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+        .replace(/<link[^>]*stylesheet[^>]*>/gi, '')
+        .replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
+      
+      console.log(`✅ Cleaned to ${html.length} bytes`);
+      
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Request timeout (30s exceeded) - Article too large');
+      }
+      throw fetchError;
     }
 
-    const html = await response.text();
-    const fetchTime = Date.now() - startTime;
-
-    console.log(`✅ HTML fetched in ${fetchTime}ms (${html.length} bytes)`);
-
-    // 4. Parse con JSDOM
-    const dom = new JSDOM(html, { url: articleUrl });
+    // 4. Parse con JSDOM (optimized)
+    console.log('🔨 Creating JSDOM...');
+    const dom = new JSDOM(html, { 
+      url: articleUrl,
+      // Performance optimizations
+      resources: 'usable',
+      runScripts: 'outside-only',
+      pretendToBeVisual: false
+    });
     const document = dom.window.document;
 
     // 5. Estrai metadata prima di Readability
@@ -142,12 +189,16 @@ export async function GET(request) {
 
   } catch (error) {
     console.error('❌ Parse Article Error:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Article URL:', articleUrl);
     
     return Response.json({
       success: false,
       error: error.message,
+      errorType: error.name,
       message: 'Unable to parse article. Please try opening the original link.',
-      originalUrl: request.url
+      originalUrl: articleUrl
     }, { status: 500 });
   }
 }

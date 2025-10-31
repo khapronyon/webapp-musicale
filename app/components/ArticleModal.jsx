@@ -16,7 +16,23 @@ export default function ArticleModal({ articleUrl, onClose }) {
         setError(null);
 
         const encodedUrl = encodeURIComponent(articleUrl);
-        const response = await fetch(`/api/news/parse-article?url=${encodedUrl}`);
+        
+        // Timeout di 35 secondi (più lungo del backend per sicurezza)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
+        
+        const response = await fetch(`/api/news/parse-article?url=${encodedUrl}`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Unable to parse article (invalid response format)');
+        }
+
         const data = await response.json();
 
         if (!data.success) {
@@ -26,13 +42,18 @@ export default function ArticleModal({ articleUrl, onClose }) {
         setArticle(data.article);
       } catch (err) {
         console.error('Error fetching article:', err);
-        setError(err.message);
         
-        // Se fallisce, apri direttamente il link esterno
+        if (err.name === 'AbortError') {
+          setError('Article loading timeout - opening in new tab...');
+        } else {
+          setError(err.message || 'Unable to load article');
+        }
+        
+        // Apri direttamente il link esterno dopo 1 secondo
         setTimeout(() => {
           window.open(articleUrl, '_blank');
           onClose();
-        }, 2000);
+        }, 1000);
       } finally {
         setLoading(false);
       }
@@ -58,37 +79,56 @@ export default function ArticleModal({ articleUrl, onClose }) {
     };
   }, []);
 
+  // Extract domain for URL bar
+  const extractDomain = (url) => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname.replace('www.', '');
+    } catch (e) {
+      return url;
+    }
+  };
+
   if (!articleUrl) return null;
 
   return (
     <div className="article-modal-overlay" onClick={onClose}>
       <div className="article-modal-container" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="article-modal-header">
+        {/* Header - Browser Style */}
+        <div className="browser-header">
           <button 
             onClick={onClose} 
             className="back-button"
             aria-label="Close article"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <span>Back to News</span>
           </button>
 
-          {article && (
-            <a 
-              href={articleUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="external-link-button"
-            >
-              <span>Read Original</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </a>
-          )}
+          {/* URL Bar (fake but looks real) */}
+          <div className="url-bar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="lock-icon">
+              <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="2"/>
+              <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+            <span className="url-text">
+              {article ? extractDomain(articleUrl) : articleUrl ? extractDomain(articleUrl) : 'Loading...'}
+            </span>
+          </div>
+
+          {/* Open External Button */}
+          <a 
+            href={articleUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="external-button"
+            title="Open in browser"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
         </div>
 
         {/* Content */}
@@ -97,13 +137,33 @@ export default function ArticleModal({ articleUrl, onClose }) {
             <div className="loading-state">
               <div className="spinner"></div>
               <p>Loading article...</p>
+              <p className="loading-hint">This may take up to 30 seconds for long articles</p>
+              
+              {/* Skeleton preview mentre carica */}
+              <div className="skeleton-preview">
+                <div className="skeleton-line skeleton-title"></div>
+                <div className="skeleton-line skeleton-subtitle"></div>
+                <div className="skeleton-image"></div>
+                <div className="skeleton-line"></div>
+                <div className="skeleton-line"></div>
+                <div className="skeleton-line short"></div>
+              </div>
             </div>
           )}
 
           {error && (
             <div className="error-state">
               <p className="error-message">⚠️ {error}</p>
-              <p className="error-hint">Opening original article in new tab...</p>
+              <p className="error-hint">Opening article in new tab...</p>
+              <a 
+                href={articleUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="error-link"
+                onClick={onClose}
+              >
+                Click here if not redirected automatically
+              </a>
             </div>
           )}
 
@@ -152,6 +212,11 @@ export default function ArticleModal({ articleUrl, onClose }) {
 
               {/* Footer */}
               <footer className="article-footer">
+                <div className="footer-disclaimer">
+                  <p className="copyright-notice">
+                    Content © {article.siteName || 'Original Publisher'} • Displayed for personal reading only
+                  </p>
+                </div>
                 <a 
                   href={articleUrl} 
                   target="_blank" 
@@ -197,6 +262,7 @@ export default function ArticleModal({ articleUrl, onClose }) {
           flex-direction: column;
           overflow: hidden;
           animation: slideUp 0.3s ease-out;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
 
         @keyframes slideUp {
@@ -210,54 +276,85 @@ export default function ArticleModal({ articleUrl, onClose }) {
           }
         }
 
-        .article-modal-header {
+        /* Browser-style Header */
+        .browser-header {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          padding: 16px 20px;
+          gap: 12px;
+          padding: 12px 16px;
+          background: #f8f9fa;
           border-bottom: 1px solid #e5e7eb;
-          background: #f9fafb;
           flex-shrink: 0;
         }
 
         .back-button {
           display: flex;
           align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          background: transparent;
-          border: none;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          background: white;
+          border: 1px solid #e5e7eb;
           color: #6b7280;
-          font-size: 14px;
-          font-weight: 500;
+          border-radius: 8px;
           cursor: pointer;
-          border-radius: 6px;
           transition: all 0.2s;
+          flex-shrink: 0;
         }
 
         .back-button:hover {
-          background: #e5e7eb;
+          background: #f3f4f6;
+          border-color: #d1d5db;
           color: #111827;
         }
 
-        .external-link-button {
+        /* URL Bar (looks like real browser) */
+        .url-bar {
+          flex: 1;
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
-          background: #8b5cf6;
-          color: white;
-          border: none;
-          border-radius: 6px;
-          font-size: 14px;
-          font-weight: 500;
-          text-decoration: none;
-          cursor: pointer;
-          transition: background 0.2s;
+          gap: 8px;
+          padding: 8px 12px;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          min-width: 0;
         }
 
-        .external-link-button:hover {
-          background: #7c3aed;
+        .lock-icon {
+          color: #10b981;
+          flex-shrink: 0;
+        }
+
+        .url-text {
+          font-size: 14px;
+          color: #6b7280;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+        }
+
+        .external-button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          background: white;
+          border: 1px solid #e5e7eb;
+          color: #6b7280;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          flex-shrink: 0;
+          text-decoration: none;
+        }
+
+        .external-button:hover {
+          background: #8b5cf6;
+          border-color: #8b5cf6;
+          color: white;
         }
 
         .article-modal-content {
@@ -294,6 +391,60 @@ export default function ArticleModal({ articleUrl, onClose }) {
           font-size: 14px;
         }
 
+        .loading-hint {
+          font-size: 12px !important;
+          color: #9ca3af !important;
+          font-style: italic;
+          margin-top: 8px;
+        }
+
+        /* Skeleton Preview */
+        .skeleton-preview {
+          width: 100%;
+          max-width: 600px;
+          margin-top: 40px;
+          padding: 20px;
+        }
+
+        .skeleton-line {
+          height: 16px;
+          background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+          border-radius: 4px;
+          margin-bottom: 12px;
+        }
+
+        .skeleton-line.skeleton-title {
+          height: 32px;
+          width: 80%;
+          margin-bottom: 16px;
+        }
+
+        .skeleton-line.skeleton-subtitle {
+          height: 20px;
+          width: 60%;
+          margin-bottom: 24px;
+        }
+
+        .skeleton-line.short {
+          width: 70%;
+        }
+
+        .skeleton-image {
+          height: 200px;
+          background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+          border-radius: 8px;
+          margin-bottom: 24px;
+        }
+
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+
         /* Error State */
         .error-state {
           text-align: center;
@@ -310,6 +461,20 @@ export default function ArticleModal({ articleUrl, onClose }) {
         .error-hint {
           color: #6b7280;
           font-size: 14px;
+          margin-bottom: 16px;
+        }
+
+        .error-link {
+          display: inline-block;
+          color: #8b5cf6;
+          font-size: 14px;
+          font-weight: 500;
+          text-decoration: underline;
+          cursor: pointer;
+        }
+
+        .error-link:hover {
+          color: #7c3aed;
         }
 
         /* Article Reader */
@@ -437,6 +602,16 @@ export default function ArticleModal({ articleUrl, onClose }) {
           text-align: center;
         }
 
+        .footer-disclaimer {
+          margin-bottom: 16px;
+        }
+
+        .copyright-notice {
+          font-size: 12px;
+          color: #9ca3af;
+          margin: 0;
+        }
+
         .original-link {
           display: inline-block;
           color: #8b5cf6;
@@ -464,6 +639,24 @@ export default function ArticleModal({ articleUrl, onClose }) {
             max-width: 100%;
             max-height: 100vh;
             border-radius: 0;
+          }
+
+          .browser-header {
+            padding: 10px 12px;
+          }
+
+          .back-button,
+          .external-button {
+            width: 32px;
+            height: 32px;
+          }
+
+          .url-bar {
+            padding: 6px 10px;
+          }
+
+          .url-text {
+            font-size: 13px;
           }
 
           .article-modal-content {

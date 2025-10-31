@@ -1,5 +1,5 @@
 import Parser from 'rss-parser';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabase-server';
 
 // Lista RSS feeds musicali
 const MUSIC_RSS_FEEDS = [
@@ -41,10 +41,10 @@ const MUSIC_RSS_FEEDS = [
   }
 ];
 
-// Cache in-memory (12 ore)
+// Cache in-memory (6 ore invece di 12)
 let cachedNews = null;
 let cacheTimestamp = null;
-const CACHE_DURATION = 12 * 60 * 60 * 1000; // 12 ore in ms
+const CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 ore in ms
 
 export async function GET(request) {
   try {
@@ -70,7 +70,7 @@ export async function GET(request) {
     
     // 3. Se userId fornito, recupera artisti seguiti
     if (userId) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServer
         .from('followed_artists')
         .select('artist_name')
         .eq('user_id', userId);
@@ -85,14 +85,17 @@ export async function GET(request) {
 
     console.log(`🎸 Fetching news for ${followedArtists.length} followed artists`);
 
-    // Blacklist keywords NON musicali
+    // Blacklist keywords NON musicali (ESPANSA)
     const NON_MUSIC_KEYWORDS = [
-      'game', 'gaming', 'video game', 'videogame',
-      'tv show', 'tv series', 'television', 'netflix', 'hulu', 'disney+',
-      'movie', 'film', 'cinema',
-      'fortnite', 'minecraft', 'call of duty',
-      'stranger things', 'the simpsons', 'animal crossing',
-      'zelda', 'lego', 'marvel', 'dc comics'
+      'game', 'gaming', 'video game', 'videogame', 'gamer',
+      'tv show', 'tv series', 'television', 'netflix', 'hulu', 'disney+', 'hbo', 'amazon prime',
+      'movie', 'film', 'cinema', 'actor', 'actress',
+      'fortnite', 'minecraft', 'call of duty', 'valorant', 'league of legends',
+      'stranger things', 'the simpsons', 'animal crossing', 'squid game',
+      'zelda', 'lego', 'marvel', 'dc comics', 'star wars',
+      'podcast', 'streamer', 'twitch', 'youtube video',
+      'book', 'novel', 'author', 'writer',
+      'comic', 'manga', 'anime'
     ];
 
     // 4. Parse tutti i feed RSS
