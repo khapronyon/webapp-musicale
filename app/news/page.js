@@ -1,352 +1,526 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
-import { ExternalLink, Calendar, Heart, Bookmark, Share2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import Header from '@/app/components/Header';
+import Footer from '@/app/components/Footer';
+import ArticleModal from '@/app/components/ArticleModal';
 
 export default function NewsPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedSource, setSelectedSource] = useState('all');
+  const [selectedArticle, setSelectedArticle] = useState(null);
 
-  const observerTarget = useRef(null);
-
+  // Get current user
   useEffect(() => {
-    checkUser();
-  }, []);
-
-  // Infinite scroll observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && user) {
-          loadMore();
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
-
-    return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
-      }
-    };
-  }, [hasMore, loadingMore, user]);
-
-  async function checkUser() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/auth/login');
-      return;
-    }
-    setUser(user);
-    loadNews(user);
-  }
-
-  async function loadNews(currentUser) {
-    try {
-      setLoading(true);
-
-      // Ottieni artisti seguiti da Supabase client-side
-      const { data: followedArtists } = await supabase
-        .from('followed_artists')
-        .select('artist_name')
-        .eq('user_id', currentUser.id);
-
-      const artistNames = followedArtists?.map(a => a.artist_name) || [];
-      
-      console.log(`📰 Sending ${artistNames.length} artists to API:`, artistNames);
-
-      // POST invece di GET, passa artisti nel body
-      const response = await fetch(`/api/personalized-news`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artistNames: artistNames,
-          page: 1,
-          pageSize: 10
-        })
-      });
-      
-      const data = await response.json();
-
-      if (data.error) {
-        console.error('Error loading news:', data.error);
-        setArticles([]);
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/auth/login');
         return;
       }
+      setUser(user);
+    };
+    getCurrentUser();
+  }, [router]);
 
-      console.log(`✅ Loaded ${data.articles.length} articles`);
-      console.log('📊 Response data:', data);
-      
-      // Debug warnings
-      if (data.mock) {
-        console.warn('⚠️⚠️⚠️ SHOWING MOCK DATA - Not real articles ⚠️⚠️⚠️');
-      }
-      if (!data.followedArtistsCount || data.followedArtistsCount === 0) {
-        console.warn('⚠️⚠️⚠️ You are following 0 artists! ⚠️⚠️⚠️');
-      }
-      if (data.followedArtistsCount > 0 && data.mock) {
-        console.warn('⚠️⚠️⚠️ Following artists but still showing mock! Check API logs ⚠️⚠️⚠️');
-      }
-      
-      setArticles(data.articles || []);
-      setHasMore(data.articles.length >= 10);
+  // Fetch news articles
+  useEffect(() => {
+    if (!user) return;
 
-    } catch (error) {
-      console.error('Error loading news:', error);
-      setArticles([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+    const fetchNews = async () => {
+      try {
+        setLoading(true);
 
-  async function loadMore() {
-    if (!hasMore || loadingMore || !user) return;
+        // Chiamata alla nuova API RSS feed
+        const response = await fetch(`/api/news/rss-feed?userId=${user.id}`);
+        const data = await response.json();
+
+        if (data.success) {
+          setArticles(data.articles);
+          console.log(`📰 Loaded ${data.articles.length} news articles`);
+        } else {
+          console.error('Failed to fetch news:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching news:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNews();
+  }, [user]);
+
+  // Get unique sources for filter
+  const sources = ['all', ...new Set(articles.map(a => a.source))];
+
+  // Filter articles by source
+  const filteredArticles = selectedSource === 'all' 
+    ? articles 
+    : articles.filter(a => a.source === selectedSource);
+
+  // Format date
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays < 7) return `${diffDays} days ago`;
     
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    setPage(nextPage);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  };
 
-    try {
-      // Ottieni artisti
-      const { data: followedArtists } = await supabase
-        .from('followed_artists')
-        .select('artist_name')
-        .eq('user_id', user.id);
+  // Handle article click
+  const handleArticleClick = (article) => {
+    setSelectedArticle(article.link);
+  };
 
-      const artistNames = followedArtists?.map(a => a.artist_name) || [];
-
-      const response = await fetch(`/api/personalized-news`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artistNames: artistNames,
-          page: nextPage,
-          pageSize: 10
-        })
-      });
-      
-      const data = await response.json();
-
-      if (data.error) throw new Error(data.error);
-
-      const newArticles = data.articles || [];
-      setArticles(prev => [...prev, ...newArticles]);
-      setHasMore(newArticles.length >= 10);
-    } catch (error) {
-      console.error('Error loading more:', error);
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  if (loading) {
+  if (!user) {
     return (
-      <div className="min-h-screen bg-neutral-light flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4 animate-bounce">📰</div>
-          <p className="text-gray-600">Caricamento del tuo feed...</p>
+      <div className="page-container">
+        <div className="loading">
+          <div className="spinner"></div>
+          <p>Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-neutral-light pb-20">
+    <>
       <Header />
-
-      <main className="max-w-2xl mx-auto px-0 sm:px-4 py-0 sm:py-8">
-        {/* Header Feed */}
-        <div className="bg-white p-4 sm:rounded-t-lg border-b border-gray-200 sticky top-0 z-10">
-          <h1 className="text-2xl font-bold text-neutral-dark">Il Tuo Feed</h1>
-          <p className="text-sm text-gray-600 mt-1">News personalizzate sui tuoi artisti</p>
+      <div className="page-container">
+        {/* Header */}
+        <div className="page-header">
+          <h1 className="page-title">🗞️ Music News</h1>
+          <p className="page-subtitle">
+            Latest articles from top music publications
+          </p>
         </div>
 
-        {/* Feed Verticale */}
-        {articles.length === 0 ? (
-          <div className="text-center py-12 bg-white sm:rounded-b-lg">
-            <p className="text-6xl mb-4">🎤</p>
-            <h2 className="text-xl font-bold text-neutral-dark mb-2">
-              Nessuna news nel tuo feed
-            </h2>
-            <p className="text-gray-600 mb-4">
-              Segui alcuni artisti per ricevere news personalizzate!
-            </p>
-            <button
-              onClick={() => router.push('/artists')}
-              className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-light transition"
+      {/* Filters */}
+      <div className="filters-container">
+        <div className="filter-group">
+          <label>Source:</label>
+          <select 
+            value={selectedSource}
+            onChange={(e) => setSelectedSource(e.target.value)}
+            className="filter-select"
+          >
+            {sources.map(source => (
+              <option key={source} value={source}>
+                {source === 'all' ? 'All Sources' : source}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="articles-count">
+          {filteredArticles.length} article{filteredArticles.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <p>Loading latest news...</p>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && filteredArticles.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-icon">📰</div>
+          <h3>No articles found</h3>
+          <p>
+            {selectedSource === 'all' 
+              ? "We couldn't find any recent articles. Try again later!" 
+              : `No articles from ${selectedSource}. Try selecting a different source.`
+            }
+          </p>
+        </div>
+      )}
+
+      {/* News Grid */}
+      {!loading && filteredArticles.length > 0 && (
+        <div className="news-grid">
+          {filteredArticles.map((article, index) => (
+            <div 
+              key={`${article.link}-${index}`} 
+              className="news-card"
+              onClick={() => handleArticleClick(article)}
             >
-              Cerca Artisti
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-0">
-            {articles.map((article, index) => {
-              return (
-                <React.Fragment key={`${article.id}-${index}`}>
-                  <article className="bg-white border-b border-gray-200 last:sm:rounded-b-lg">
-                    {/* Wrapper cliccabile per tutta la card */}
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block hover:bg-gray-50 transition"
-                    >
-                      {/* Source & Date */}
-                      <div className="px-4 py-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">
-                            {article.source.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm text-neutral-dark">{article.source}</p>
-                            <p className="text-xs text-gray-500">
-                              {(() => {
-                                const date = new Date(article.publishedAt);
-                                const now = new Date();
-                                const diffMs = now - date;
-                                const diffMins = Math.floor(diffMs / 60000);
-                                const diffHours = Math.floor(diffMs / 3600000);
-                                const diffDays = Math.floor(diffMs / 86400000);
+              {/* Image */}
+              {article.image && (
+                <div className="news-image-container">
+                  <img 
+                    src={article.image} 
+                    alt={article.title}
+                    className="news-image"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
 
-                                if (diffMins < 60) return `${diffMins}m fa`;
-                                if (diffHours < 24) return `${diffHours}h fa`;
-                                if (diffDays < 7) return `${diffDays}g fa`;
-                                return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
-                              })()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Image */}
-                      <div className="w-full aspect-[4/3] bg-gray-200 relative">
-                        <img
-                          src={article.image}
-                          alt={article.title}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = 'https://placehold.co/800x600/667eea/ffffff?text=News';
-                          }}
-                        />
-                      </div>
-
-                      {/* Content */}
-                      <div className="p-4">
-                        {/* Title */}
-                        <h2 className="text-lg font-bold text-neutral-dark mb-2 line-clamp-3">
-                          {article.title}
-                        </h2>
-
-                        {/* Description */}
-                        {article.description && (
-                          <p className="text-gray-600 text-sm mb-3 line-clamp-3">
-                            {article.description}
-                          </p>
-                        )}
-
-                        {/* Author */}
-                        {article.author && (
-                          <p className="text-xs text-gray-500 mb-3">
-                            {article.author}
-                          </p>
-                        )}
-
-                        {/* Read More Indicator */}
-                        <div className="inline-flex items-center gap-2 text-primary font-medium text-sm">
-                          Leggi articolo
-                          <ExternalLink size={14} />
-                        </div>
-                      </div>
-                    </a>
-
-                    {/* Action Buttons - Outside link */}
-                    <div className="px-4 pb-4 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <div className="flex items-center gap-4">
-                        <button 
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-2 text-gray-600 hover:text-primary transition"
-                        >
-                          <Heart size={20} />
-                          <span className="text-sm font-medium">Mi piace</span>
-                        </button>
-                        <button 
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-2 text-gray-600 hover:text-primary transition"
-                        >
-                          <Bookmark size={20} />
-                          <span className="text-sm font-medium">Salva</span>
-                        </button>
-                      </div>
-                      <button 
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 text-gray-600 hover:text-primary transition"
-                      >
-                        <Share2 size={20} />
-                      </button>
-                    </div>
-                  </article>
-
-                  {/* [SPAZIO PUBBLICITÁ] - Ogni 5 articoli */}
-                  {(index + 1) % 5 === 0 && index !== articles.length - 1 && (
-                    <div className="bg-gray-50 border-y border-gray-200 p-6 text-center">
-                      <p className="text-xs text-gray-500 mb-2">PUBBLICITÀ</p>
-                      <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-8">
-                        <p className="text-gray-400">Spazio pubblicitario {Math.floor((index + 1) / 5)}</p>
-                      </div>
-                    </div>
+              {/* Content */}
+              <div className="news-content">
+                {/* Source Badge */}
+                <div className="news-source-badge">
+                  {article.sourceLogo && (
+                    <img 
+                      src={article.sourceLogo} 
+                      alt={article.source}
+                      className="source-logo"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
                   )}
-                </React.Fragment>
-              );
-            })}
+                  <span>{article.source}</span>
+                </div>
 
-            {/* Loading More Indicator */}
-            {loadingMore && (
-              <div className="text-center py-8 bg-white">
-                <div className="text-4xl mb-2 animate-bounce">📰</div>
-                <p className="text-gray-600 text-sm">Caricamento altre news...</p>
+                {/* Title */}
+                <h3 className="news-title">{article.title}</h3>
+
+                {/* Description */}
+                {article.description && (
+                  <p className="news-description">
+                    {article.description.length > 150 
+                      ? article.description.substring(0, 150) + '...' 
+                      : article.description
+                    }
+                  </p>
+                )}
+
+                {/* Footer */}
+                <div className="news-footer">
+                  <span className="news-date">{formatDate(article.pubDate)}</span>
+                  {article.matchedArtist && (
+                    <span className="matched-artist-badge">
+                      🎵 {article.matchedArtist}
+                    </span>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
+          ))}
+        </div>
+      )}
 
-            {/* Infinite Scroll Target */}
-            {hasMore && <div ref={observerTarget} className="h-20"></div>}
+      {/* Article Modal */}
+      {selectedArticle && (
+        <ArticleModal 
+          articleUrl={selectedArticle}
+          onClose={() => setSelectedArticle(null)}
+        />
+      )}
 
-            {/* End of Feed */}
-            {!hasMore && articles.length > 0 && (
-              <div className="text-center py-8 bg-white sm:rounded-b-lg">
-                <p className="text-gray-500 text-sm">
-                  Hai visualizzato tutte le news disponibili
-                </p>
-                <button
-                  onClick={() => {
-                    setPage(1);
-                    setArticles([]);
-                    loadNews(user);
-                  }}
-                  className="mt-4 px-4 py-2 text-primary hover:bg-primary-light hover:bg-opacity-10 rounded-lg transition text-sm font-medium"
-                >
-                  Ricarica feed
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
+      <style jsx>{`
+        .page-container {
+          min-height: calc(100vh - 60px - 70px); /* viewport - header - footer */
+          background: #f5f5f5; /* bg-neutral-light */
+          padding: 20px;
+          padding-bottom: 40px;
+        }
 
-      <Footer />
+        .page-header {
+          max-width: 1200px;
+          margin: 0 auto 32px;
+          text-align: center;
+        }
+
+        .page-title {
+          font-size: 32px;
+          font-weight: 700;
+          color: #1f2937; /* text-neutral-dark */
+          margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+          font-size: 16px;
+          color: #6b7280; /* text-gray-600 */
+        }
+
+        /* Filters */
+        .filters-container {
+          max-width: 1200px;
+          margin: 0 auto 24px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 16px;
+          padding: 16px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-group {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .filter-group label {
+          font-size: 14px;
+          font-weight: 500;
+          color: #1f2937;
+        }
+
+        .filter-select {
+          padding: 8px 16px;
+          background: white;
+          border: 2px solid #e5e7eb;
+          border-radius: 8px;
+          color: #1f2937;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .filter-select:hover {
+          border-color: #8b5cf6;
+        }
+
+        .filter-select:focus {
+          outline: none;
+          border-color: #8b5cf6;
+        }
+
+        .filter-select option {
+          background: white;
+          color: #1f2937;
+        }
+
+        .articles-count {
+          font-size: 14px;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        /* Loading State */
+        .loading-state {
+          max-width: 1200px;
+          margin: 60px auto;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .spinner {
+          width: 40px;
+          height: 40px;
+          border: 3px solid #e5e7eb;
+          border-top-color: #8b5cf6;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .loading-state p {
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        /* Empty State */
+        .empty-state {
+          max-width: 500px;
+          margin: 60px auto;
+          text-align: center;
+          padding: 40px;
+          background: white;
+          border-radius: 16px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .empty-icon {
+          font-size: 64px;
+          margin-bottom: 16px;
+        }
+
+        .empty-state h3 {
+          font-size: 24px;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 8px;
+        }
+
+        .empty-state p {
+          font-size: 16px;
+          color: #6b7280;
+          line-height: 1.6;
+        }
+
+        /* News Grid */
+        .news-grid {
+          max-width: 1200px;
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+          gap: 24px;
+        }
+
+        /* News Card */
+        .news-card {
+          background: white;
+          border-radius: 12px;
+          overflow: hidden;
+          transition: all 0.3s;
+          cursor: pointer;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          border: 2px solid transparent;
+        }
+
+        .news-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+          border-color: #8b5cf6;
+        }
+
+        .news-image-container {
+          width: 100%;
+          height: 200px;
+          overflow: hidden;
+          background: rgba(0, 0, 0, 0.3);
+        }
+
+        .news-image {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          transition: transform 0.3s;
+        }
+
+        .news-card:hover .news-image {
+          transform: scale(1.05);
+        }
+
+        .news-content {
+          padding: 20px;
+        }
+
+        .news-source-badge {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .source-logo {
+          width: 16px;
+          height: 16px;
+          object-fit: contain;
+        }
+
+        .news-source-badge span {
+          font-size: 12px;
+          font-weight: 600;
+          color: #8b5cf6;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .news-title {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1f2937; /* text-neutral-dark */
+          line-height: 1.4;
+          margin-bottom: 12px;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .news-description {
+          font-size: 14px;
+          color: #6b7280; /* text-gray-600 */
+          line-height: 1.6;
+          margin-bottom: 16px;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .news-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          padding-top: 16px;
+          border-top: 1px solid #e5e7eb;
+        }
+
+        .news-date {
+          font-size: 12px;
+          color: #6b7280;
+        }
+
+        .matched-artist-badge {
+          font-size: 11px;
+          padding: 4px 8px;
+          background: rgba(139, 92, 246, 0.2);
+          color: #a78bfa;
+          border-radius: 6px;
+          font-weight: 500;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+          .page-container {
+            padding: 16px;
+            padding-bottom: 40px;
+          }
+
+          .page-title {
+            font-size: 24px;
+          }
+
+          .filters-container {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .filter-group {
+            width: 100%;
+          }
+
+          .filter-select {
+            flex: 1;
+          }
+
+          .news-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+          }
+
+          .news-image-container {
+            height: 180px;
+          }
+        }
+      `}</style>
     </div>
+    <Footer />
+    </>
   );
 }
